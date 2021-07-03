@@ -232,7 +232,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Kv': tsSet.getAcquisition().getVoltage(),
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
             '-OutXF': 1,  # generate IMOD-compatible file
-            '-Defoc': 0,  # self.getDefocusAverageFromSeries(ts),
+            '-Defoc': 0,  # disable defocus correction
             '-Gpu': '%(GPU)s'
         }
 
@@ -406,18 +406,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         angleStepAverage /= ts.getSize() - 1
 
         return angleStepAverage
-
-    def getDefocusAverageFromSeries(self, ts):
-        """ This method return the average defocus from a series. """
-        defocusAvg = 0
-
-        if ts.getFirstItem().hasCTF():
-            for i in range(1, ts.getSize() + 1):
-                defocusAvg += (ts[i].getCTF().getDefocusU() + ts[i].getCTF().getDefocusV()) / 2
-
-            defocusAvg /= ts.getSize()
-
-        return defocusAvg
 
     def _getSetOfTiltSeries(self):
         return self.inputSetOfTiltSeries.get()
