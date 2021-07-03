@@ -67,7 +67,7 @@ class TestAreTomo(TestAreTomoBase):
         print(magentaStr("\n==> Testing AreTomo:"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=protImport.outputTiltSeries,
-                                binning=1)
+                                tomoThickness=200, alignZ=180, tiltAxisAngle=-12.5)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.outputSetOfTomograms,
                              "SetOfTomograms has not been produced.")

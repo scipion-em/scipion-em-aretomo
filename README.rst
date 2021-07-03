@@ -25,9 +25,9 @@ This plugin provide a wrapper around `AreTomo <https://msg.ucsf.edu/software>`_ 
         :alt: Downloads
 
 
-+--------------+----------------+--------------------+
-| prod: |prod| | devel: |devel| | support: |support| |
-+--------------+----------------+--------------------+
++--------------+----------------+
+| prod: |prod| | devel: |devel| |
++--------------+----------------+
 
 .. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_prod.svg
 .. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_devel.svg

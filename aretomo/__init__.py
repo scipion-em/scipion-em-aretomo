@@ -29,11 +29,11 @@ import os
 import pwem
 import pyworkflow.utils as pwutils
 
-from aretomo.constants import (ARETOMO_HOME, ARETOMO_BIN,
-                               ARETOMO_CUDA_LIB, V1_0_6)
+from .constants import (ARETOMO_HOME, ARETOMO_BIN,
+                        ARETOMO_CUDA_LIB, V1_0_6)
 
 
-__version__ = '3.0.0b1'
+__version__ = '3.0.0b2'
 _logo = "aretomo_logo.png"
 _references = ['Zheng']
 
@@ -63,7 +63,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def getProgram(cls):
         """ Return the program binary that will be used. """
-        return cls.getHome('bin', 'AreTomo_1.0.6_Cuda101')
+        return cls.getHome('bin', cls.getVar(ARETOMO_BIN))
 
     @classmethod
     def defineBinaries(cls, env):

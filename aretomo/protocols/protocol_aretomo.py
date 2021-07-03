@@ -41,6 +41,7 @@ from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
 
 from .. import Plugin
 from ..constants import *
+from ..convert import getTransformationMatrix
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
@@ -203,7 +204,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         """Generate angle file"""
         angleFilePath = self.getFilePath(tsObjId, tmpPrefix, ".tlt")
-        ts.generateTltFile(angleFilePath)
+        self._generateTltFile(ts, angleFilePath)
 
     def runAreTomoStep(self, tsObjId):
         """ Call AreTomo with the appropriate parameters. """
@@ -231,12 +232,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Kv': tsSet.getAcquisition().getVoltage(),
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
             '-OutXF': 1,  # generate IMOD-compatible file
-            '-Defoc': 0,  # self.getDefocusAverageFromSeries(ts),
+            '-Defoc': 0,  # disable defocus correction
             '-Gpu': '%(GPU)s'
         }
-
-        # if self.doDw:
-        #   args['-ImgDose'] = ts.getFirstItem().getAcquisition().getDosePerFrame() * ts.getSize()
 
         if self.reconMethod == RECON_SART:
             args['-Sart'] = '%d %d' % (self.SARTiter, self.SARTproj)
@@ -300,6 +298,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTi.setLocation(index + 1,
                                   (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                 newTi.setSamplingRate(self._getOutputSampling())
+
+                # set Transform
+                alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
+                alignmentMatrix = getTransformationMatrix(alignFn)
+                transform = Transform()
+                transform.setMatrix(alignmentMatrix[:, :, index])
+                newTi.setTransform(transform)
+
                 newTs.append(newTi)
 
             dims = self._getOutputDim(newTi.getFileName())
@@ -401,18 +407,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         return angleStepAverage
 
-    def getDefocusAverageFromSeries(self, ts):
-        """ This method return the average defocus from a series. """
-        defocusAvg = 0
-
-        if ts.getFirstItem().hasCTF():
-            for i in range(1, ts.getSize() + 1):
-                defocusAvg += (ts[i].getCTF().getDefocusU() + ts[i].getCTF().getDefocusV()) / 2
-
-            defocusAvg /= ts.getSize()
-
-        return defocusAvg
-
     def _getSetOfTiltSeries(self):
         return self.inputSetOfTiltSeries.get()
 
@@ -423,3 +417,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         ih = ImageHandler()
         x, y, z, _ = ih.getDimensions(fn)
         return (x, y, z)
+
+    def _generateTltFile(self, ts, outputFn):
+        """ Generate .tlt file with tilt angles and accumulated dose. """
+        tsList = []
+
+        for index, ti in enumerate(ts):
+            accDose = ti.getAcquisition().getDosePerFrame()
+            tAngle = ti.getTiltAngle()
+            tsList.append((tAngle, accDose))
+
+        with open(outputFn, 'w') as f:
+            if self.doDW:
+                for i in tsList:
+                    f.write("%0.3f %0.3f\n" % (i[0], i[1]))
+            else:
+                f.writelines("%0.3f\n" % i[0] for i in tsList)
