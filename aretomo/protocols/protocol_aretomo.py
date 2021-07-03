@@ -41,6 +41,7 @@ from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
 
 from .. import Plugin
 from ..constants import *
+from ..convert import getTransformationMatrix
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
@@ -300,6 +301,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTi.setLocation(index + 1,
                                   (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                 newTi.setSamplingRate(self._getOutputSampling())
+
+                # set Transform
+                alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
+                alignmentMatrix = getTransformationMatrix(alignFn)
+                transform = Transform()
+                transform.setMatrix(alignmentMatrix[:, :, index])
+                newTi.setTransform(transform)
+
                 newTs.append(newTi)
 
             dims = self._getOutputDim(newTi.getFileName())
