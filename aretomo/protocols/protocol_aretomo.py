@@ -204,7 +204,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         """Generate angle file"""
         angleFilePath = self.getFilePath(tsObjId, tmpPrefix, ".tlt")
-        ts.generateTltFile(angleFilePath)
+        self._generateTltFile(ts, angleFilePath)
 
     def runAreTomoStep(self, tsObjId):
         """ Call AreTomo with the appropriate parameters. """
@@ -235,9 +235,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Defoc': 0,  # self.getDefocusAverageFromSeries(ts),
             '-Gpu': '%(GPU)s'
         }
-
-        # if self.doDw:
-        #   args['-ImgDose'] = ts.getFirstItem().getAcquisition().getDosePerFrame() * ts.getSize()
 
         if self.reconMethod == RECON_SART:
             args['-Sart'] = '%d %d' % (self.SARTiter, self.SARTproj)
@@ -432,3 +429,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         ih = ImageHandler()
         x, y, z, _ = ih.getDimensions(fn)
         return (x, y, z)
+
+    def _generateTltFile(self, ts, outputFn):
+        """ Generate .tlt file with tilt angles and accumulated dose. """
+        tsList = []
+
+        for index, ti in enumerate(ts):
+            accDose = ti.getAcquisition().getDosePerFrame()
+            tAngle = ti.getTiltAngle()
+            tsList.append((tAngle, accDose))
+
+        with open(outputFn, 'w') as f:
+            if self.doDW:
+                for i in tsList:
+                    f.write("%0.3f %0.3f\n" % (i[0], i[1]))
+            else:
+                f.writelines("%0.3f\n" % i[0] for i in tsList)
