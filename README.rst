@@ -31,7 +31,6 @@ This plugin provide a wrapper around `AreTomo <https://msg.ucsf.edu/software>`_ 
 
 .. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_prod.svg
 .. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_devel.svg
-.. |support| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_support.svg
 
 
 Installation

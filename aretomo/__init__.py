@@ -33,7 +33,7 @@ from aretomo.constants import (ARETOMO_HOME, ARETOMO_BIN,
                                ARETOMO_CUDA_LIB, V1_0_6)
 
 
-__version__ = '3.0.0'
+__version__ = '3.0.0b1'
 _logo = "aretomo_logo.png"
 _references = ['Zheng']
 
