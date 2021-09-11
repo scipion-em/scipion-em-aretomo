@@ -55,7 +55,8 @@ class TestAreTomoBase(BaseTest):
                                            dosePerFrame=0.3,
                                            minAngle=-55,
                                            maxAngle=65.0,
-                                           stepAngle=2.0)
+                                           stepAngle=2.0,
+                                           tiltAxisAngle=-12.5)
         cls.launchProtocol(cls.protImportTS)
         return cls.protImportTS
 
