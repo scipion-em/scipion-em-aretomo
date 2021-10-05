@@ -30,10 +30,10 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .constants import (ARETOMO_HOME, ARETOMO_BIN,
-                        ARETOMO_CUDA_LIB, V1_0_6)
+                        ARETOMO_CUDA_LIB, V1_0_6, V1_0_8)
 
 
-__version__ = '3.0.0b2'
+__version__ = '3.0.0'
 _logo = "aretomo_logo.png"
 _references = ['Zheng']
 
@@ -41,13 +41,13 @@ _references = ['Zheng']
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME]
-    _supportedVersions = [V1_0_6]
+    _supportedVersions = [V1_0_6, V1_0_8]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_0_6)
-        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.0.6_Cuda101')
+        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_0_8)
+        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.0.8_Cuda101')
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
@@ -67,6 +67,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('aretomo', version=V1_0_6,
-                       tar='aretomo_v1.0.6.tgz',
-                       default=True)
+        for v in cls._supportedVersions:
+            env.addPackage('aretomo', version=v,
+                           tar='aretomo_v%s.tgz' % v,
+                           default=v==V1_0_8)
