@@ -24,15 +24,6 @@ This plugin provide a wrapper around `AreTomo <https://msg.ucsf.edu/software>`_ 
         :target: https://pypi.python.org/pypi/scipion-em-aretomo
         :alt: Downloads
 
-
-+--------------+----------------+
-| prod: |prod| | devel: |devel| |
-+--------------+----------------+
-
-.. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_prod.svg
-.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/aretomo_devel.svg
-
-
 Installation
 ------------
 
@@ -59,8 +50,8 @@ b) Developer's version
         scipion installp -p path_to_scipion-em-aretomo --devel
 
 AreTomo binaries will be installed automatically with the plugin, but you can also link an existing installation. 
-Default installation path assumed is ``software/em/aretomo-1.0.6``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to
-the folder where the AreTomo is installed. Depending on your CUDA version you might want to change the default binary from ``AreTomo_1.0.6_Cuda101``
+Default installation path assumed is ``software/em/aretomo-1.0.8``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to
+the folder where the AreTomo is installed. Depending on your CUDA version you might want to change the default binary from ``AreTomo_1.0.8_Cuda101``
 to a different one by explicitly setting *ARETOMO_BIN* variable. If you need to use CUDA different from the one used during Scipion installation
 (defined by CUDA_LIB), you can add *ARETOMO_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
@@ -68,17 +59,25 @@ To check the installation, simply run the following Scipion test:
 
 ``scipion test aretomo.tests.test_protocols_aretomo.TestAreTomo``
 
+Licensing
+---------
+
+AreTomo is free for academic use only. For commercial use, please contact David Agard or Yifan Cheng for licensing:
+
+    * agard@msg.ucsf.edu
+    * Yifan.Cheng@ucsf.edu
+
 Supported versions
 ------------------
 
-1.0.6
+1.0.6, 1.0.8
 
 Protocols
 ---------
 
     * tilt-series align and reconstruct
 
-Detailed manual can be found in ``software/em/aretomo-1.0.6/bin/AreTomoManual-06-24-2021.pdf``
+Detailed manual can be found in ``software/em/aretomo-1.0.8/bin/AreTomoManual-06-24-2021.pdf``
 
 References
 ----------

@@ -30,6 +30,7 @@ ARETOMO_CUDA_LIB = 'ARETOMO_CUDA_LIB'
 
 # Supported versions
 V1_0_6 = '1.0.6'
+V1_0_8 = '1.0.8'
 
 RECON_SART = 0
 RECON_WBP = 1
