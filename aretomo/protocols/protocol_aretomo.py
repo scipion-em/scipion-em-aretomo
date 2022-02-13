@@ -292,21 +292,24 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTiltSeries.append(newTs)
             newTs.setSamplingRate(self._getOutputSampling())
 
+            secs = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
+
             for index, tiltImage in enumerate(ts):
-                newTi = TiltImage()
-                newTi.copyInfo(tiltImage, copyId=True)
-                newTi.setLocation(index + 1,
-                                  (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
-                newTi.setSamplingRate(self._getOutputSampling())
+                if (index + 1) in secs:
+                    newTi = TiltImage()
+                    newTi.copyInfo(tiltImage, copyId=True)
+                    newTi.setLocation(index + 1,
+                                      (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
+                    newTi.setSamplingRate(self._getOutputSampling())
 
-                # set Transform
-                alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
-                alignmentMatrix = getTransformationMatrix(alignFn)
-                transform = Transform()
-                transform.setMatrix(alignmentMatrix[:, :, index])
-                newTi.setTransform(transform)
+                    # set Transform
+                    alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
+                    alignmentMatrix = getTransformationMatrix(alignFn)
+                    transform = Transform()
+                    transform.setMatrix(alignmentMatrix[:, :, secs.index(index+1)])
+                    newTi.setTransform(transform)
 
-                newTs.append(newTi)
+                    newTs.append(newTi)
 
             dims = self._getOutputDim(newTi.getFileName())
             newTs.setDim(dims)
@@ -433,3 +436,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                     f.write("%0.3f %0.3f\n" % (i[0], i[1]))
             else:
                 f.writelines("%0.3f\n" % i[0] for i in tsList)
+
+    def _readAlnFile(self, fn):
+        """ Read output tilt section numbers as 1-based index. """
+        secs = []
+        with open(fn, 'r') as f:
+            line = f.readline()
+            while line:
+                if not line.startswith("#"):
+                    secs.append(int(line.strip().split()[0]) + 1)
+                line = f.readline()
+
+        return secs
