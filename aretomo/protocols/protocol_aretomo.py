@@ -222,7 +222,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-TiltAxis': self.tiltAxisAngle.get(),
             '-TiltRange': '%d %d' % (ts.getFirstItem().getTiltAngle(),
                                      ts[ts.getSize()].getTiltAngle()),
-            '-AlignZ': self.alignZ if not self.skipAlign else 0,
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
             '-Align': 0 if self.skipAlign else 1,
@@ -235,6 +234,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Defoc': 0,  # disable defocus correction
             '-Gpu': '%(GPU)s'
         }
+
+        if not self.skipAlign:
+            args['-AlignZ'] = self.alignZ
 
         if self.reconMethod == RECON_SART:
             args['-Sart'] = '%d %d' % (self.SARTiter, self.SARTproj)
@@ -297,7 +299,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             for index, tiltImage in enumerate(ts):
                 if (index + 1) in secs:
                     newTi = TiltImage()
-                    newTi.copyInfo(tiltImage, copyId=True)
+                    newTi.copyInfo(tiltImage)
                     newTi.setLocation(index + 1,
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
@@ -351,7 +353,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _validate(self):
         errors = []
 
-        if self.alignZ >= self.tomoThickness:
+        if not self.skipAlign and (self.alignZ >= self.tomoThickness):
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
