@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.0.3'
+__version__ = '3.0.4'
 _logo = "aretomo_logo.png"
 _references = ['Zheng']
 
@@ -58,6 +58,21 @@ class Plugin(pwem.Plugin):
         environ.addLibrary(cudaLib)
 
         return environ
+
+    @classmethod
+    def versionGE(cls, version):
+        """ Return True if current version of AreTomo is newer
+         or equal than the input argument.
+         Params:
+            version: string version (semantic version, e.g 1.0.12)
+        """
+        v1 = cls.getActiveVersion()
+        if v1 not in cls._supportedVersions:
+            raise Exception("This version of AreTomo is not supported: ", v1)
+
+        if cls._supportedVersions.index(v1) < cls._supportedVersions.index(version):
+            return False
+        return True
 
     @classmethod
     def getProgram(cls):
