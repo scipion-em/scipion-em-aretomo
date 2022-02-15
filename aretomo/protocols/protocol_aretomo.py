@@ -75,7 +75,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            'tilt-series will be only aligned.')
 
         form.addParam('binFactor', params.IntParam,
-                      default=1, label='Binning', important=True,
+                      default=2, label='Binning', important=True,
                       help='Binning for aligned output tilt-series / volume.')
 
         form.addParam('alignZ', params.IntParam, default=800,
@@ -91,7 +91,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         form.addParam('tomoThickness', params.IntParam,
                       condition='makeTomo', important=True,
-                      default=1000, label='Tomogram thickness (voxels)',
+                      default=1200, label='Tomogram thickness (voxels)',
                       help='Z height of the reconstructed volume in '
                            '*unbinned* voxels.')
 
@@ -127,7 +127,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "projection (WBP).")
 
         line = form.addLine("SART options", condition='reconMethod==0')
-        line.addParam('SARTiter', params.IntParam, default=20,
+        line.addParam('SARTiter', params.IntParam, default=15,
                       label='iterations')
         line.addParam('SARTproj', params.IntParam, default=5,
                       label='projections per subset')
