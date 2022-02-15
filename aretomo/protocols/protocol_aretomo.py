@@ -299,7 +299,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             for index, tiltImage in enumerate(ts):
                 if (index + 1) in secs:
                     newTi = TiltImage()
-                    newTi.copyInfo(tiltImage, copyId=True)
+                    newTi.copyInfo(tiltImage)
                     newTi.setLocation(index + 1,
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
