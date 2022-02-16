@@ -28,15 +28,13 @@
 
 @article{Zheng,
   Title      = "AreTomo",
-  Author     = "Zheng S.",
-  Journal    = "unpublished",
-  Year       = "unpublished",
+  Author     = "Zheng, Shawn and Wolff, Georg and Greenan, Garrett and Chen, Zhen and Faas, Frank G.A. and Bárcena, Montserrat and Koster, Abraham J. and Cheng, Yifan and Agard, David",
+  Journal    = "bioRxiv",
+  Year       = "2022",
   Pages      = "",
   Volume     = "",
   Number     = "",
-  Doi        = "https://msg.ucsf.edu/software",
-  Note	     = "unpublished",
-  Url        = "https://msg.ucsf.edu/software"
+  Doi        = "http://dx.doi.org/10.1101/2022.02.15.480593"
 }
 
 """
