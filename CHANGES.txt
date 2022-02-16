@@ -1,3 +1,4 @@
+3.0.6 - fix dose-weighting error, update citation
 3.0.5 - added refine tilt angles param for 1.0.12+
 3.0.4 - added refine tilt axis param, switch off volume flip for v1.0.12+
 3.0.3 - bug fixes (reported by Bram Koster)

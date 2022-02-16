@@ -464,7 +464,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         tsList = []
 
         for index, ti in enumerate(ts):
-            accDose = ti.getAcquisition().getDosePerFrame()
+            accDose = ti.getAcquisition().getAccumDose()
             tAngle = ti.getTiltAngle()
             tsList.append((tAngle, accDose))
 
