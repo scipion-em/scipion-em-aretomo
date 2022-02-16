@@ -95,6 +95,22 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       help='Z height of the reconstructed volume in '
                            '*unbinned* voxels.')
 
+        if Plugin.versionGE(V1_0_12):
+            form.addParam('refineTiltAngles',
+                          params.EnumParam,
+                          choices=['No', 'Measure only', 'Measure and correct'],
+                          display=params.EnumParam.DISPLAY_COMBO,
+                          label="Refine tilt angles?", default=1,
+                          help="You have three options:\na) Disable measure and correction\n"
+                               "b) Measure only (default). Correction is done during alignment but not "
+                               "for final reconstruction\nc) Measure and correct\n\n"
+                               "Occasionally, the measurement is erroneous and can impair the "
+                               "alignment accuracy. Please note that the orientation of the missing "
+                               "wedge will be changed as a result of the correction of tilt offset. "
+                               "For subtomogram averaging, tomograms reconstructed from tilt "
+                               "series collected within the same tilt range may have different "
+                               "orientations of missing wedges.")
+
         form.addParam('tiltAxisAngle', params.FloatParam,
                       default=0., label='Tilt axis angle',
                       help='Note that the orientation of tilt axis is '
@@ -251,6 +267,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         if Plugin.versionGE(V1_0_12):
             args['-TiltAxis'] = "%s %s" % (self.tiltAxisAngle.get(),
                                            self.refineTiltAxis.get() - 1)
+            args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
         else:
             args['-TiltAxis'] = self.tiltAxisAngle.get()
 
