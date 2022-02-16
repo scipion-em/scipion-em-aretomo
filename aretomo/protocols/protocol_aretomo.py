@@ -75,7 +75,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            'tilt-series will be only aligned.')
 
         form.addParam('binFactor', params.IntParam,
-                      default=1, label='Binning', important=True,
+                      default=2, label='Binning', important=True,
                       help='Binning for aligned output tilt-series / volume.')
 
         form.addParam('alignZ', params.IntParam, default=800,
@@ -91,7 +91,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         form.addParam('tomoThickness', params.IntParam,
                       condition='makeTomo', important=True,
-                      default=1000, label='Tomogram thickness (voxels)',
+                      default=1200, label='Tomogram thickness (voxels)',
                       help='Z height of the reconstructed volume in '
                            '*unbinned* voxels.')
 
@@ -101,6 +101,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            'relative to the y-axis (vertical axis of '
                            'tilt image) and rotates counter-clockwise.\n'
                            'NOTE: this is the same convention as IMOD.')
+
+        if Plugin.versionGE(V1_0_12):
+            form.addParam('refineTiltAxis', params.EnumParam,
+                          choices=['No',
+                                   'Refine and use the refined value for the entire tilt series',
+                                   'Refine and calculate tilt axis at each tilt angle'],
+                          display=params.EnumParam.DISPLAY_COMBO,
+                          label="Refine tilt axis angle?", default=1,
+                          help="Tilt axis determination is a two-step processing in AreTomo. "
+                               "A single tilt axis is first calculated followed by the determination "
+                               "of how tilt axis varies over the entire tilt range. The initial "
+                               "value lets users enter their estimate and AreTomo refines the "
+                               "estimate in [-3°, 3°] range.")
 
         form.addParam('doDW', params.BooleanParam, default=False,
                       label="Do dose-weighting?")
@@ -114,7 +127,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "projection (WBP).")
 
         line = form.addLine("SART options", condition='reconMethod==0')
-        line.addParam('SARTiter', params.IntParam, default=20,
+        line.addParam('SARTiter', params.IntParam, default=15,
                       label='iterations')
         line.addParam('SARTproj', params.IntParam, default=5,
                       label='projections per subset')
@@ -125,7 +138,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "and the input tilt series use the same grayscale "
                            "that makes dense structures dark.")
 
-        form.addParam('flipVol', params.BooleanParam, default=True,
+        form.addParam('flipVol', params.BooleanParam,
+                      default=Plugin.versionGE(V1_0_12),
                       label="Flip volume?",
                       help="This saves x-y volume slices according to their Z "
                            "coordinates, similar to IMOD.")
@@ -219,7 +233,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-InMrc': self.getFilePath(tsObjId, tmpPrefix, ".mrc"),
             '-OutMrc': self.getFilePath(tsObjId, extraPrefix, ".mrc"),
             '-AngFile': self.getFilePath(tsObjId, tmpPrefix, ".tlt"),
-            '-TiltAxis': self.tiltAxisAngle.get(),
             '-TiltRange': '%d %d' % (ts.getFirstItem().getTiltAngle(),
                                      ts[ts.getSize()].getTiltAngle()),
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
@@ -234,6 +247,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Defoc': 0,  # disable defocus correction
             '-Gpu': '%(GPU)s'
         }
+
+        if Plugin.versionGE(V1_0_12):
+            args['-TiltAxis'] = "%s %s" % (self.tiltAxisAngle.get(),
+                                           self.refineTiltAxis.get() - 1)
+        else:
+            args['-TiltAxis'] = self.tiltAxisAngle.get()
 
         if not self.skipAlign:
             args['-AlignZ'] = self.alignZ

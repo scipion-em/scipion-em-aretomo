@@ -2,7 +2,7 @@
 AreTomo plugin
 ==============
 
-This plugin provide a wrapper around `AreTomo <https://msg.ucsf.edu/software>`_ program.
+This plugin provides a wrapper for `AreTomo <https://msg.ucsf.edu/software>`_ program.
 
 .. image:: https://img.shields.io/pypi/v/scipion-em-aretomo.svg
         :target: https://pypi.python.org/pypi/scipion-em-aretomo
@@ -47,7 +47,7 @@ b) Developer's version
 
     .. code-block::
 
-        scipion installp -p path_to_scipion-em-aretomo --devel
+        scipion installp -p /path/to/scipion-em-aretomo --devel
 
 AreTomo binaries will be installed automatically with the plugin, but you can also link an existing installation. 
 Default installation path assumed is ``software/em/aretomo-1.0.12``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to
