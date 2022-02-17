@@ -335,7 +335,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 if (index + 1) in secs:
                     newTi = TiltImage()
                     newTi.copyInfo(tiltImage)
-                    newTi.setLocation(index + 1,
+                    newTi.setLocation(secs.index(index+1),
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
                     newTs.append(newTi)
@@ -380,7 +380,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _validate(self):
         errors = []
 
-        if not self.skipAlign and (self.alignZ >= self.tomoThickness):
+        if self.makeTomo and (self.alignZ >= self.tomoThickness):
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
