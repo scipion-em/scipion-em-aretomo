@@ -339,14 +339,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                     newTi.setLocation(index + 1,
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
-
-                    # set Transform
-                    alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
-                    alignmentMatrix = getTransformationMatrix(alignFn)
-                    transform = Transform()
-                    transform.setMatrix(alignmentMatrix[:, :, secs.index(index+1)])
-                    newTi.setTransform(transform)
-
                     newTs.append(newTi)
 
             dims = self._getOutputDim(newTi.getFileName())
