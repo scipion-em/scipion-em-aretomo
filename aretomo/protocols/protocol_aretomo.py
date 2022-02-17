@@ -41,7 +41,6 @@ from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
 
 from .. import Plugin
 from ..constants import *
-from ..convert import getTransformationMatrix
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
