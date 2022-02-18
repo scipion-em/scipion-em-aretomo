@@ -41,7 +41,6 @@ from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
 
 from .. import Plugin
 from ..constants import *
-from ..convert import getTransformationMatrix
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
@@ -155,7 +154,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "that makes dense structures dark.")
 
         form.addParam('flipVol', params.BooleanParam,
-                      default=Plugin.versionGE(V1_0_12),
+                      default=self._flipOutputVol(),
                       label="Flip volume?",
                       help="This saves x-y volume slices according to their Z "
                            "coordinates, similar to IMOD.")
@@ -336,7 +335,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 if (index + 1) in secs:
                     newTi = TiltImage()
                     newTi.copyInfo(tiltImage)
-                    newTi.setLocation(index + 1,
+                    newTi.setLocation(secs.index(index+1),
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
                     newTs.append(newTi)
@@ -381,7 +380,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _validate(self):
         errors = []
 
-        if not self.skipAlign and (self.alignZ >= self.tomoThickness):
+        if self.makeTomo and (self.alignZ >= self.tomoThickness):
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
@@ -478,3 +477,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 line = f.readline()
 
         return secs
+
+    def _flipOutputVol(self):
+        """ From v1.0.12 flip is no longer required. """
+        return not Plugin.versionGE(V1_0_12)

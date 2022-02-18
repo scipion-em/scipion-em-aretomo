@@ -1,3 +1,4 @@
+3.0.8 - fix output TS file loc index
 3.0.7 - fix bug: writing output alignment info to an already aligned TS
 3.0.6 - fix dose-weighting error, update citation
 3.0.5 - added refine tilt angles param for 1.0.12+
