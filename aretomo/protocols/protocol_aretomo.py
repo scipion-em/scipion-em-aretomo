@@ -380,7 +380,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _validate(self):
         errors = []
 
-        if self.makeTomo and (self.alignZ >= self.tomoThickness):
+        if (not self.skipAlign) and self.makeTomo and (self.alignZ >= self.tomoThickness):
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
