@@ -53,6 +53,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
+        form.addHidden('tiltAxisAngle', params.FloatParam,
+                       default=0., label='Tilt axis angle',
+                       help='Note that the orientation of tilt axis is '
+                            'relative to the y-axis (vertical axis of '
+                            'tilt image) and rotates counter-clockwise.\n'
+                            'NOTE: this is the same convention as IMOD.')
         form.addSection(label='Input')
         form.addParam('inputSetOfTiltSeries',
                       params.PointerParam,
@@ -109,13 +115,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                                "For subtomogram averaging, tomograms reconstructed from tilt "
                                "series collected within the same tilt range may have different "
                                "orientations of missing wedges.")
-
-        form.addParam('tiltAxisAngle', params.FloatParam,
-                      default=0., label='Tilt axis angle',
-                      help='Note that the orientation of tilt axis is '
-                           'relative to the y-axis (vertical axis of '
-                           'tilt image) and rotates counter-clockwise.\n'
-                           'NOTE: this is the same convention as IMOD.')
 
         if Plugin.versionGE(V1_0_12):
             form.addParam('refineTiltAxis', params.EnumParam,
@@ -263,12 +262,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Gpu': '%(GPU)s'
         }
 
+        tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
+
         if Plugin.versionGE(V1_0_12):
-            args['-TiltAxis'] = "%s %s" % (self.tiltAxisAngle.get(),
+            args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
                                            self.refineTiltAxis.get() - 1)
             args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
         else:
-            args['-TiltAxis'] = self.tiltAxisAngle.get()
+            args['-TiltAxis'] = tiltAxisAngle
 
         if not self.skipAlign:
             args['-AlignZ'] = self.alignZ
