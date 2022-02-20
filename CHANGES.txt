@@ -1,3 +1,4 @@
+3.0.9 - remove tilt axis angle from GUI, fix validation, fix accum.dose and dose weighting
 3.0.8 - fix output TS file loc index
 3.0.7 - fix bug: writing output alignment info to an already aligned TS
 3.0.6 - fix dose-weighting error, update citation
