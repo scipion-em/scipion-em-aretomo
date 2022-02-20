@@ -53,6 +53,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
+        form.addHidden('tiltAxisAngle', params.FloatParam,
+                       default=0., label='Tilt axis angle',
+                       help='Note that the orientation of tilt axis is '
+                            'relative to the y-axis (vertical axis of '
+                            'tilt image) and rotates counter-clockwise.\n'
+                            'NOTE: this is the same convention as IMOD.')
         form.addSection(label='Input')
         form.addParam('inputSetOfTiltSeries',
                       params.PointerParam,
@@ -109,13 +115,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                                "For subtomogram averaging, tomograms reconstructed from tilt "
                                "series collected within the same tilt range may have different "
                                "orientations of missing wedges.")
-
-        form.addParam('tiltAxisAngle', params.FloatParam,
-                      default=0., label='Tilt axis angle',
-                      help='Note that the orientation of tilt axis is '
-                           'relative to the y-axis (vertical axis of '
-                           'tilt image) and rotates counter-clockwise.\n'
-                           'NOTE: this is the same convention as IMOD.')
 
         if Plugin.versionGE(V1_0_12):
             form.addParam('refineTiltAxis', params.EnumParam,
@@ -263,12 +262,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Gpu': '%(GPU)s'
         }
 
+        tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
+
         if Plugin.versionGE(V1_0_12):
-            args['-TiltAxis'] = "%s %s" % (self.tiltAxisAngle.get(),
+            args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
                                            self.refineTiltAxis.get() - 1)
             args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
         else:
-            args['-TiltAxis'] = self.tiltAxisAngle.get()
+            args['-TiltAxis'] = tiltAxisAngle
 
         if not self.skipAlign:
             args['-AlignZ'] = self.alignZ
@@ -316,6 +317,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMin(ts.getFirstItem().getTiltAngle())
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
+            acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
             newTomogram.setAcquisition(acquisition)
 
             outputSetOfTomograms.append(newTomogram)
@@ -335,6 +337,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 if (index + 1) in secs:
                     newTi = TiltImage()
                     newTi.copyInfo(tiltImage)
+                    newTi.setAcquisition(tiltImage.getAcquisition())
                     newTi.setLocation(secs.index(index+1),
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
@@ -380,7 +383,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _validate(self):
         errors = []
 
-        if self.makeTomo and (self.alignZ >= self.tomoThickness):
+        if (not self.skipAlign) and self.makeTomo and (self.alignZ >= self.tomoThickness):
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
