@@ -82,4 +82,4 @@ Detailed manual can be found in ``software/em/aretomo-1.0.12/bin/AreTomoManual-0
 References
 ----------
 
-    * Shawn Zheng, unpublished.
+    * AreTomo: An integrated software package for automated marker-free, motion-corrected cryo-electron tomographic alignment and reconstruction. Shawn Zheng, Georg Wolff, Garrett Greenan, Zhen Chen, Frank G. A. Faas, Montserrat Bárcena, Abraham J. Koster, Yifan Cheng, David Agard. bioRxiv 2022.02.15.480593; doi: https://doi.org/10.1101/2022.02.15.480593
