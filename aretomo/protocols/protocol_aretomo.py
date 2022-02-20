@@ -316,6 +316,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMin(ts.getFirstItem().getTiltAngle())
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
+            acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
             newTomogram.setAcquisition(acquisition)
 
             outputSetOfTomograms.append(newTomogram)
@@ -335,6 +336,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 if (index + 1) in secs:
                     newTi = TiltImage()
                     newTi.copyInfo(tiltImage)
+                    newTi.setAcquisition(tiltImage.getAcquisition())
                     newTi.setLocation(secs.index(index+1),
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
