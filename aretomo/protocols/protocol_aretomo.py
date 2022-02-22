@@ -316,7 +316,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
             acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
-            acquisition.setTiltAxisAngle(ts.getAcquisition().getTiltAxisAngle())
+            acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
             newTomogram.setTsId(ts.getTsId())
 
@@ -332,17 +332,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             newTs.setSamplingRate(self._getOutputSampling())
 
             secs, rots, tilts = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
-            self.error("\n\nProcessing %s" % tsId)
-            self.error("Input TS has %d sections" % len(ts))
-            self.error("Output TS has %d sections" % len(secs))
 
             for secNum, tiltImage in enumerate(ts.iterItems()):
                 if secNum in secs:
                     newTi = TiltImage()
-                    newTi.copyInfo(tiltImage)
+                    newTi.copyInfo(tiltImage, copyTM=False)
 
                     acq = tiltImage.getAcquisition()
-                    acq.setTiltAxisAngle(rots[secs.index(secNum)])
+                    acq.setTiltAxisAngle(0.0)
                     newTi.setAcquisition(acq)
 
                     newTi.setTiltAngle(tilts[secs.index(secNum)])
@@ -350,13 +347,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
                     newTs.append(newTi)
-                    self.error("Section #%d has TltAxs %0.2f, TltAng %0.2f, fnIndex %d" % (secNum, rots[secs.index(secNum)], tilts[secs.index(secNum)], secs.index(secNum) + 1))
-                else:
-                    self.error("Section #%d removed" % secNum)
 
-            # update tilt axis angle for TS with the first value only
+            # set tilt axis angle to 0 as TS is now aligned
             acq = newTs.getAcquisition()
-            acq.setTiltAxisAngle(rots[0])
+            acq.setTiltAxisAngle(0.0)
             newTs.setAcquisition(acq)
 
             dims = self._getOutputDim(newTi.getFileName())
