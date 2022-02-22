@@ -247,8 +247,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-InMrc': self.getFilePath(tsObjId, tmpPrefix, ".mrc"),
             '-OutMrc': self.getFilePath(tsObjId, extraPrefix, ".mrc"),
             '-AngFile': self.getFilePath(tsObjId, tmpPrefix, ".tlt"),
-            '-TiltRange': '%d %d' % (ts.getFirstItem().getTiltAngle(),
-                                     ts[ts.getSize()].getTiltAngle()),
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
             '-Align': 0 if self.skipAlign else 1,
@@ -318,7 +316,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
             acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
+            acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
+            newTomogram.setTsId(ts.getTsId())
 
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
@@ -331,17 +331,27 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTiltSeries.append(newTs)
             newTs.setSamplingRate(self._getOutputSampling())
 
-            secs = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
+            secs, rots, tilts = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
 
-            for index, tiltImage in enumerate(ts):
-                if (index + 1) in secs:
+            for secNum, tiltImage in enumerate(ts.iterItems()):
+                if secNum in secs:
                     newTi = TiltImage()
-                    newTi.copyInfo(tiltImage)
-                    newTi.setAcquisition(tiltImage.getAcquisition())
-                    newTi.setLocation(secs.index(index+1),
+                    newTi.copyInfo(tiltImage, copyTM=False)
+
+                    acq = tiltImage.getAcquisition()
+                    acq.setTiltAxisAngle(0.0)
+                    newTi.setAcquisition(acq)
+
+                    newTi.setTiltAngle(tilts[secs.index(secNum)])
+                    newTi.setLocation(secs.index(secNum) + 1,
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                     newTi.setSamplingRate(self._getOutputSampling())
                     newTs.append(newTi)
+
+            # set tilt axis angle to 0 as TS is now aligned
+            acq = newTs.getAcquisition()
+            acq.setTiltAxisAngle(0.0)
+            newTs.setAcquisition(acq)
 
             dims = self._getOutputDim(newTi.getFileName())
             newTs.setDim(dims)
@@ -470,16 +480,23 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 f.writelines("%0.3f\n" % i[0] for i in tsList)
 
     def _readAlnFile(self, fn):
-        """ Read output tilt section numbers as 1-based index. """
-        secs = []
+        """ Read output alignment file:
+            - section number (SEC, 0-indexed)
+            - tilt axis offset (ROT)
+            - refined tilt angles (TILT)
+        """
+        secs, rots, tilts = [], [], []
         with open(fn, 'r') as f:
             line = f.readline()
             while line:
                 if not line.startswith("#"):
-                    secs.append(int(line.strip().split()[0]) + 1)
+                    values = line.strip().split()
+                    secs.append(int(values[0]))
+                    rots.append(float(values[1]))
+                    tilts.append(float(values[-1]))
                 line = f.readline()
 
-        return secs
+        return secs, rots, tilts
 
     def _flipOutputVol(self):
         """ From v1.0.12 flip is no longer required. """
