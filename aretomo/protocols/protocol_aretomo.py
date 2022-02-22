@@ -247,8 +247,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-InMrc': self.getFilePath(tsObjId, tmpPrefix, ".mrc"),
             '-OutMrc': self.getFilePath(tsObjId, extraPrefix, ".mrc"),
             '-AngFile': self.getFilePath(tsObjId, tmpPrefix, ".tlt"),
-            '-TiltRange': '%d %d' % (ts.getFirstItem().getTiltAngle(),
-                                     ts[ts.getSize()].getTiltAngle()),
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
             '-Align': 0 if self.skipAlign else 1,
@@ -342,9 +340,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 if secNum in secs:
                     newTi = TiltImage()
                     newTi.copyInfo(tiltImage)
+
                     acq = tiltImage.getAcquisition()
                     acq.setTiltAxisAngle(rots[secs.index(secNum)])
                     newTi.setAcquisition(acq)
+
                     newTi.setTiltAngle(tilts[secs.index(secNum)])
                     newTi.setLocation(secs.index(secNum) + 1,
                                       (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
