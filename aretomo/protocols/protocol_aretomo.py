@@ -41,6 +41,7 @@ from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
 
 from .. import Plugin
 from ..constants import *
+from ..convert import getTransformationMatrix
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
@@ -78,6 +79,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       default=True, label='Reconstruct tomogram?',
                       help='You can skip tomogram reconstruction, so that input '
                            'tilt-series will be only aligned.')
+
+        form.addParam('saveUnalignedTS', params.BooleanParam,
+                      condition='not makeTomo',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      default=False, label='Save unaligned TS with alignment info',
+                      help='Save unaligned TS stack with the transformation matrix, that '
+                           'can be later applied in *imod - apply transformation* '
+                           'or *xmipptomo - apply alignment tilt-series*. '
+                           'Important: transformation matrix only accounts for global '
+                           'motion!')
 
         form.addParam('binFactor', params.IntParam,
                       default=2, label='Binning', important=True,
@@ -294,6 +305,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def createOutputStep(self, tsObjId):
         ts = self._getSetOfTiltSeries()[tsObjId]
         tsId = ts.getTsId()
+        tmpPrefix = self._getTmpPath(tsId)
         extraPrefix = self._getExtraPath(tsId)
 
         if self.makeTomo:
@@ -325,7 +337,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTomograms.write()
         else:
             outputSetOfTiltSeries = self.getOutputSetOfTiltSeries()
-
             newTs = TiltSeries(tsId=tsId)
             newTs.copyInfo(ts)
             outputSetOfTiltSeries.append(newTs)
@@ -361,6 +372,54 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTiltSeries.updateDim()
             outputSetOfTiltSeries.write()
 
+            if self._saveUnalignedTS():
+                unalignedTS = self.getOutputSetOfTiltSeriesUnaligned()
+                newTs = TiltSeries(tsId=tsId)
+                newTs.copyInfo(ts)
+                unalignedTS.append(newTs)
+                newTs.setSamplingRate(self._getSetOfTiltSeries().getSamplingRate())
+
+                secs, rots, tilts = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
+                ih = ImageHandler()
+                alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
+                alignmentMatrix = getTransformationMatrix(alignFn)
+
+                for secNum, tiltImage in enumerate(ts.iterItems()):
+                    if secNum in secs:
+                        newTi = TiltImage()
+                        newTi.copyInfo(tiltImage, copyTM=False)
+
+                        acq = tiltImage.getAcquisition()
+                        acq.setTiltAxisAngle(rots[secs.index(secNum)])
+                        newTi.setAcquisition(acq)
+                        newTi.setTiltAngle(tilts[secs.index(secNum)])
+
+                        oldLocation = (secNum + 1, self.getFilePath(tsObjId, tmpPrefix, ".mrc:mrcs"))
+                        newLocation = (secs.index(secNum) + 1, self.getFilePath(tsObjId, extraPrefix, "_orig.mrcs"))
+                        ih.convert(oldLocation, newLocation)
+                        newTi.setLocation(newLocation)
+                        newTi.setSamplingRate(self._getSetOfTiltSeries().getSamplingRate())
+
+                        # set Transform
+                        transform = Transform()
+                        transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
+                        newTi.setTransform(transform)
+
+                        newTs.append(newTi)
+
+                # update tilt axis angle for TS with the first value only
+                acq = newTs.getAcquisition()
+                acq.setTiltAxisAngle(rots[0])
+                newTs.setAcquisition(acq)
+
+                dims = self._getOutputDim(newTi.getFileName())
+                newTs.setDim(dims)
+                newTs.write(properties=False)
+
+                unalignedTS.update(newTs)
+                unalignedTS.updateDim()
+                unalignedTS.write()
+
         self._store()
 
     def closeOutputSetsStep(self):
@@ -368,6 +427,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             self.getOutputSetOfTomograms().setStreamState(Set.STREAM_CLOSED)
         else:
             self.getOutputSetOfTiltSeries().setStreamState(Set.STREAM_CLOSED)
+            if self._saveUnalignedTS():
+                self.getOutputSetOfTiltSeriesUnaligned().setStreamState(Set.STREAM_CLOSED)
+
         self._store()
 
     # --------------------------- INFO functions ------------------------------
@@ -431,16 +493,33 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         if hasattr(self, "outputSetOfTiltSeries"):
             self.outputSetOfTiltSeries.enableAppend()
         else:
+            inputTS = self._getSetOfTiltSeries()
             outputSetOfTiltSeries = self._createSetOfTiltSeries()
-            outputSetOfTiltSeries.copyInfo(self._getSetOfTiltSeries())
+            outputSetOfTiltSeries.copyInfo(inputTS)
             # Dimensions will be updated later
-            outputSetOfTiltSeries.setDim(self._getSetOfTiltSeries().getDim())
+            outputSetOfTiltSeries.setDim(inputTS.getDim())
             outputSetOfTiltSeries.setSamplingRate(self._getOutputSampling())
             outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(outputSetOfTiltSeries=outputSetOfTiltSeries)
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTiltSeries)
         return self.outputSetOfTiltSeries
+
+    def getOutputSetOfTiltSeriesUnaligned(self):
+        if hasattr(self, "outputSetOfTiltSeriesUnaligned"):
+            self.outputSetOfTiltSeriesUnaligned.enableAppend()
+        else:
+            inputTS = self._getSetOfTiltSeries()
+            outputSetOfTiltSeries = self._createSetOfTiltSeries(suffix="_unaligned")
+            outputSetOfTiltSeries.copyInfo(inputTS)
+            # Dimensions will be updated later
+            outputSetOfTiltSeries.setDim(inputTS.getDim())
+            outputSetOfTiltSeries.setSamplingRate(inputTS.getSamplingRate())
+            outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
+            self._defineOutputs(outputSetOfTiltSeriesUnaligned=outputSetOfTiltSeries)
+            self._defineSourceRelation(self.inputSetOfTiltSeries,
+                                       outputSetOfTiltSeries)
+        return self.outputSetOfTiltSeriesUnaligned
 
     def getAngleStepFromSeries(self, ts):
         """ This method return the average angles step from a series. """
@@ -501,3 +580,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _flipOutputVol(self):
         """ From v1.0.12 flip is no longer required. """
         return not Plugin.versionGE(V1_0_12)
+
+    def _saveUnalignedTS(self):
+        return self.saveUnalignedTS
