@@ -53,6 +53,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
+        # Keep this for compatibility with older plugin versions
         form.addHidden('tiltAxisAngle', params.FloatParam,
                        default=0., label='Tilt axis angle',
                        help='Note that the orientation of tilt axis is '
@@ -79,12 +80,26 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       help='You can skip tomogram reconstruction, so that input '
                            'tilt-series will be only aligned.')
 
+        form.addParam('useInputProt', params.BooleanParam, default=False,
+                      condition="not skipAlign",
+                      expertLevel=params.LEVEL_ADVANCED,
+                      label="Use alignment from previous AreTomo run?")
+        form.addParam('inputProt', params.PointerParam, allowsNull=True,
+                      pointerClass="ProtAreTomoAlignRecon",
+                      condition="not skipAlign and useInputProt",
+                      expertLevel=params.LEVEL_ADVANCED,
+                      label="Previous AreTomo run",
+                      help="Use alignment from a previous AreTomo run. "
+                           "The match is made using *tsId*. This option is useful "
+                           "when working with odd/even tilt-series sets. "
+                           "All other input alignment parameters will be ignored.")
+
         form.addParam('binFactor', params.IntParam,
                       default=2, label='Binning', important=True,
                       help='Binning for aligned output tilt-series / volume.')
 
         form.addParam('alignZ', params.IntParam, default=800,
-                      condition='not skipAlign', important=True,
+                      condition='not skipAlign and not useInputProt', important=True,
                       label='Volume height for alignment (voxels)',
                       help='Specifies Z height (*unbinned*) of the temporary volume '
                            'reconstructed for projection matching as part '
@@ -102,7 +117,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         if Plugin.versionGE(V1_0_12):
             form.addParam('refineTiltAngles',
-                          params.EnumParam,
+                          params.EnumParam, condition="not useInputProt",
                           choices=['No', 'Measure only', 'Measure and correct'],
                           display=params.EnumParam.DISPLAY_COMBO,
                           label="Refine tilt angles?", default=1,
@@ -118,6 +133,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         if Plugin.versionGE(V1_0_12):
             form.addParam('refineTiltAxis', params.EnumParam,
+                          condition="not useInputProt",
                           choices=['No',
                                    'Refine and use the refined value for the entire tilt series',
                                    'Refine and calculate tilt axis at each tilt angle'],
@@ -129,10 +145,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                                "value lets users enter their estimate and AreTomo refines the "
                                "estimate in [-3°, 3°] range.")
 
+        form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
                       label="Do dose-weighting?")
-
-        form.addSection(label='Extra options')
         form.addParam('reconMethod', params.EnumParam,
                       choices=['SART', 'WBP'],
                       display=params.EnumParam.DISPLAY_HLIST,
@@ -159,6 +174,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "coordinates, similar to IMOD.")
 
         form.addParam('roiArea', params.StringParam, default='',
+                      condition="not useInputProt",
                       label="ROI for focused alignment",
                       help="By default AreTomo assumes the region of interest "
                            "at the center of 0° projection image. A circular "
@@ -178,6 +194,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         group = form.addGroup('Local motion correction')
         group.addParam('sampleType', params.EnumParam,
+                       condition="not useInputProt",
                        choices=['Disable local correction', 'Isolated', 'Well distributed'],
                        display=params.EnumParam.DISPLAY_COMBO,
                        label="Sample type", default=0,
@@ -187,7 +204,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         group.addParam('coordsFn', params.FileParam, default='',
                        label='Coordinate file',
-                       condition='sampleType==%d' % LOCAL_MOTION_COORDS,
+                       condition='not useInputProt and sampleType==%d' % LOCAL_MOTION_COORDS,
                        help="A list of x and y coordinates should be put "
                             "into a two-column text file, one column for x "
                             "and the other for y. Each pair defines a region "
@@ -195,7 +212,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                             "system is at the image’s lower left corner.")
 
         line = group.addLine("Patches",
-                             condition='sampleType==%d' % LOCAL_MOTION_PATCHES)
+                             condition='not useInputProt and sampleType==%d' % LOCAL_MOTION_PATCHES)
         line.addParam('patchX', params.IntParam, default=5,
                       label='X')
         line.addParam('patchY', params.IntParam, default=5,
@@ -234,6 +251,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         angleFilePath = self.getFilePath(tsObjId, tmpPrefix, ".tlt")
         self._generateTltFile(ts, angleFilePath)
 
+        if self.useInputProt:
+            protExtra = self.inputProt.get()._getExtraPath(tsId)
+            protAln = self.getFilePath(tsObjId, protExtra, ".aln")
+            if os.path.exists(protAln):
+                pwutils.copyFile(protAln,
+                                 self.getFilePath(tsObjId, extraPrefix, ".aln"))
+                self.info("Using input alignment: %s" % protAln)
+            else:
+                raise FileNotFoundError("Missing input aln file: %s", protAln)
+
     def runAreTomoStep(self, tsObjId):
         """ Call AreTomo with the appropriate parameters. """
         tsSet = self._getSetOfTiltSeries()
@@ -249,7 +276,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-AngFile': self.getFilePath(tsObjId, tmpPrefix, ".tlt"),
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
-            '-Align': 0 if self.skipAlign else 1,
             '-FlipInt': 1 if self.flipInt else 0,
             '-FlipVol': 1 if self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
@@ -260,30 +286,36 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Gpu': '%(GPU)s'
         }
 
-        tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
+        if not self.useInputProt:
+            args['Align'] = 0 if self.skipAlign else 1
 
-        if Plugin.versionGE(V1_0_12):
-            args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
-                                           self.refineTiltAxis.get() - 1)
-            args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
+            tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
+
+            if Plugin.versionGE(V1_0_12):
+                args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
+                                               self.refineTiltAxis.get() - 1)
+                args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
+            else:
+                args['-TiltAxis'] = tiltAxisAngle
+
+            if not self.skipAlign:
+                args['-AlignZ'] = self.alignZ
+
+            if self.sampleType.get() == LOCAL_MOTION_COORDS:
+                args['-RoiFile'] = self.coordsFn
+            elif self.sampleType.get() == LOCAL_MOTION_PATCHES:
+                args['-Patch'] = '%d %d' % (self.patchX, self.patchY)
+
+            if self.roiArea.get():
+                args['-Roi'] = self.roiArea.get()
+
         else:
-            args['-TiltAxis'] = tiltAxisAngle
-
-        if not self.skipAlign:
-            args['-AlignZ'] = self.alignZ
+            args['-AlnFile'] = self.getFilePath(tsObjId, extraPrefix, ".aln")
 
         if self.reconMethod == RECON_SART:
             args['-Sart'] = '%d %d' % (self.SARTiter, self.SARTproj)
         else:
             args['-Wbp'] = 1
-
-        if self.roiArea.get():
-            args['-Roi'] = self.roiArea.get()
-
-        if self.sampleType.get() == LOCAL_MOTION_COORDS:
-            args['-RoiFile'] = self.coordsFn
-        elif self.sampleType.get() == LOCAL_MOTION_PATCHES:
-            args['-Patch'] = '%d %d' % (self.patchX, self.patchY)
 
         param = ' '.join(['%s %s' % (k, str(v)) for k, v in args.items()])
         param += ' ' + self.extraParams.get()
@@ -393,9 +425,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _validate(self):
         errors = []
 
-        if (not self.skipAlign) and self.makeTomo and (self.alignZ >= self.tomoThickness):
-            errors.append("Z volume height for alignment should be always "
-                          "smaller than tomogram thickness.")
+        if self.useInputProt:
+            if not self.inputProt.hasValue():
+                errors.append("Provide input AreTomo protocol for alignment.")
+        else:
+            if (not self.skipAlign) and self.makeTomo and (self.alignZ >= self.tomoThickness):
+                errors.append("Z volume height for alignment should be always "
+                              "smaller than tomogram thickness.")
 
         if self.skipAlign and not self.makeTomo:
             errors.append("You cannot switch off both alignment and "
