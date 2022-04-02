@@ -486,10 +486,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             - refined tilt angles (TILT)
         """
         secs, rots, tilts = [], [], []
+        header = 0
         with open(fn, 'r') as f:
             line = f.readline()
             while line:
-                if not line.startswith("#"):
+                if line.startswith("#"):
+                    header += 1
+                elif header > 3:
+                    break
+                else:
                     values = line.strip().split()
                     secs.append(int(values[0]))
                     rots.append(float(values[1]))
