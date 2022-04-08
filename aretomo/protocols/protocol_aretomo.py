@@ -428,6 +428,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         if self.useInputProt:
             if not self.inputProt.hasValue():
                 errors.append("Provide input AreTomo protocol for alignment.")
+            if not Plugin.versionGE(V1_1_1):
+                errors.append("Input alignment can be used only with AreTomo v1.1.1+")
         else:
             if (not self.skipAlign) and self.makeTomo and (self.alignZ >= self.tomoThickness):
                 errors.append("Z volume height for alignment should be always "
