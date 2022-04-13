@@ -287,7 +287,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         }
 
         if not self.useInputProt:
-            args['Align'] = 0 if self.skipAlign else 1
+            args['-Align'] = 0 if self.skipAlign else 1
 
             tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
 
