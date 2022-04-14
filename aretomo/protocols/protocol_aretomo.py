@@ -27,6 +27,7 @@
 # **************************************************************************
 
 import os
+from glob import glob
 
 import pyworkflow.protocol.params as params
 from pyworkflow.constants import BETA
@@ -253,13 +254,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         if self.useInputProt:
             protExtra = self.inputProt.get()._getExtraPath(tsId)
-            protAln = self.getFilePath(tsObjId, protExtra, ".aln")
-            if os.path.exists(protAln):
-                pwutils.copyFile(protAln,
+            protAlnBase = self.getFilePath(tsObjId, protExtra, ".aln").replace("_even", "*").replace("_odd", "*")
+            protAln = glob(protAlnBase)
+            if len(protAln):
+                pwutils.copyFile(protAln[0],
                                  self.getFilePath(tsObjId, extraPrefix, ".aln"))
-                self.info("Using input alignment: %s" % protAln)
+                self.info("Using input alignment: %s" % protAln[0])
             else:
-                raise FileNotFoundError("Missing input aln file: %s", protAln)
+                raise FileNotFoundError("Missing input aln file ", protAlnBase)
 
     def runAreTomoStep(self, tsObjId):
         """ Call AreTomo with the appropriate parameters. """
