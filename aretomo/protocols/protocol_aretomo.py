@@ -28,6 +28,7 @@
 
 import os
 from glob import glob
+from enum import Enum
 
 import pyworkflow.protocol.params as params
 from pyworkflow.constants import BETA
@@ -38,10 +39,16 @@ from pwem.objects import Transform
 from pwem.emlib.image import ImageHandler
 
 from tomo.protocols import ProtTomoBase
-from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
+from tomo.objects import (Tomogram, TomoAcquisition, TiltSeries,
+                          TiltImage, SetOfTomograms, SetOfTiltSeries)
 
 from .. import Plugin
 from ..constants import *
+
+
+class outputs(Enum):
+    outputSetOfTomograms = SetOfTomograms
+    outputSetOfTiltSeries = SetOfTiltSeries
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
@@ -51,6 +58,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
+    _possibleOutputs = outputs
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -462,7 +470,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTomograms.copyInfo(self._getSetOfTiltSeries())
             outputSetOfTomograms.setSamplingRate(self._getOutputSampling())
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(outputSetOfTomograms=outputSetOfTomograms)
+            self._defineOutputs(**{outputs.outputSetOfTomograms.name: outputSetOfTomograms})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTomograms)
         return self.outputSetOfTomograms
@@ -477,7 +485,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTiltSeries.setDim(self._getSetOfTiltSeries().getDim())
             outputSetOfTiltSeries.setSamplingRate(self._getOutputSampling())
             outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(outputSetOfTiltSeries=outputSetOfTiltSeries)
+            self._defineOutputs(**{outputs.outputSetOfTiltSeries.name: outputSetOfTiltSeries})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTiltSeries)
         return self.outputSetOfTiltSeries
