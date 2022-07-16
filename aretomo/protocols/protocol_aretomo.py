@@ -93,7 +93,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         form.addParam('saveStack', params.BooleanParam,
                       condition="not makeTomo and not skipAlign",
-                      default=False, label="Save interpolated aligned TS?",
+                      default=True, label="Save interpolated aligned TS?",
                       help="By default we only save non-local TS alignment "
                       "from AreTomo, the aligned stack is discarded.")
 
@@ -266,15 +266,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         pwutils.makePath(tmpPrefix)
         pwutils.makePath(extraPrefix)
 
-        """Apply the transformation for the input tilt-series"""
+        # Apply the transformation for the input tilt-series
         outputTsFileName = self.getFilePath(tsObjId, tmpPrefix, ".mrc")
         ts.applyTransform(outputTsFileName)
 
-        """Generate angle file"""
+        # Generate angle file
         angleFilePath = self.getFilePath(tsObjId, tmpPrefix, ".tlt")
         self._generateTltFile(ts, angleFilePath)
 
         if self.useInputProt:
+            # Find and copy aln file
             protExtra = self.inputProt.get()._getExtraPath(tsId)
             protAlnBase = self.getFilePath(tsObjId, protExtra, ".aln").replace("_even", "*").replace("_odd", "*")
             protAln = glob(protAlnBase)
@@ -375,11 +376,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
             acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
-            newTomogram.setTsId(ts.getTsId())
+            newTomogram.setTsId(tsId)
 
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
             outputSetOfTomograms.write()
+            self._store(outputSetOfTomograms)
         else:
             secs, rots, tilts = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
             alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")

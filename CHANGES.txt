@@ -1,6 +1,6 @@
 3.1:
  - add possible outputs class
- - output aligned TS is now discarded by default and only non-local alignments are saved
+ - two default TS outputs: aligned (interpolated) TS and original (with alignment metadata)
  - added DarkTol parameter to GUI
 3.0.14 - AreTomo 1.2.0 added
 3.0.13 - fix default installed version
