@@ -28,6 +28,7 @@
 
 import os
 from glob import glob
+import numpy as np
 
 import pyworkflow.protocol.params as params
 from pyworkflow.constants import BETA
@@ -437,9 +438,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             for secNum, tiltImage in enumerate(ts.iterItems()):
                 newTi = tiltImage.clone()
                 newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
+                transform = Transform()
 
                 if secNum not in secs:
                     newTi.setEnabled(False)
+                    frameMatrix = np.zeros((3, 3))
+                    frameMatrix[2, 2] = 1.0
+                    transform.setMatrix(frameMatrix)
                 else:
                     # set tilt angles
                     acq = tiltImage.getAcquisition()
@@ -449,10 +454,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
                     # set Transform
                     alignmentMatrix = getTransformationMatrix(alignFn)
-                    transform = Transform()
                     transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
-                    newTi.setTransform(transform)
 
+                newTi.setTransform(transform)
                 newTi.setSamplingRate(self._getInputSampling())
                 newTs.append(newTi)
 

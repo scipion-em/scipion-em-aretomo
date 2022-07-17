@@ -72,3 +72,14 @@ class TestAreTomo(TestAreTomoBase):
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.outputSetOfTomograms,
                              "SetOfTomograms has not been produced.")
+
+    def test_align(self):
+        print(magentaStr("\n==> Importing data - TiltSeries:"))
+        protImport = self._runImportTiltSeries()
+        print(magentaStr("\n==> Testing AreTomo:"))
+        prot = self.newProtocol(ProtAreTomoAlignRecon,
+                                inputSetOfTiltSeries=protImport.outputTiltSeries,
+                                makeTomo=False, alignZ=180, tiltAxisAngle=-12.5)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.outputSetOfTiltSeries,
+                             "SetOfTiltSeries has not been produced.")
