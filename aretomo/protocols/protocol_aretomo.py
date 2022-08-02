@@ -185,7 +185,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "that makes dense structures dark.")
 
         form.addParam('flipVol', params.BooleanParam,
-                      default=self._flipOutputVol(),
+                      default=True,
                       label="Flip volume?",
                       help="This saves x-y volume slices according to their Z "
                            "coordinates, similar to IMOD.")
@@ -634,10 +634,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 line = f.readline()
 
         return secs, rots, tilts
-
-    def _flipOutputVol(self):
-        """ From v1.0.12 flip is no longer required. """
-        return not Plugin.versionGE(V1_0_12)
 
     def _saveInterpolated(self):
         return self.saveStack

@@ -2,6 +2,9 @@
  - add possible outputs class
  - two default TS outputs: aligned (interpolated) TS and original (with alignment metadata)
  - added DarkTol parameter to GUI
+ - add AreTomo 1.2.5
+3.0.16 - add AreTomo 1.2.5
+3.0.15 - add possible outputs class
 3.0.14 - AreTomo 1.2.0 added
 3.0.13 - fix default installed version
 3.0.12 - AreTomo 1.1.1 added, now can use previous alignment as input

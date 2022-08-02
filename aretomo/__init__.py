@@ -40,13 +40,14 @@ _references = ['Zheng']
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME]
-    _supportedVersions = [V1_0_6, V1_0_8, V1_0_10, V1_0_12, V1_1_0, V1_1_1, V1_2_0]
+    _supportedVersions = [V1_0_6, V1_0_8, V1_0_10, V1_0_12,
+                          V1_1_0, V1_1_1, V1_2_0, V1_2_5]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_2_0)
-        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.2.0_Cuda101_06-23-2022')
+        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_2_5)
+        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.2.5_Cuda101_08-01-2022')
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
     @classmethod
@@ -84,4 +85,4 @@ class Plugin(pwem.Plugin):
         for v in cls._supportedVersions:
             env.addPackage('aretomo', version=v,
                            tar='aretomo_v%s.tgz' % v,
-                           default=v == V1_2_0)
+                           default=v == V1_2_5)
