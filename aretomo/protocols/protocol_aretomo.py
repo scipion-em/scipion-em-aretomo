@@ -95,8 +95,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         form.addParam('saveStack', params.BooleanParam,
                       condition="not makeTomo and not skipAlign",
                       default=True, label="Save interpolated aligned TS?",
-                      help="By default we only save non-local TS alignment "
-                      "from AreTomo, the aligned stack is discarded.")
+                      help="Choose No to discard aligned stacks.")
 
         form.addParam('useInputProt', params.BooleanParam, default=False,
                       condition="not skipAlign",
@@ -187,8 +186,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         form.addParam('flipVol', params.BooleanParam,
                       default=True,
                       label="Flip volume?",
-                      help="This saves x-y volume slices according to their Z "
-                           "coordinates, similar to IMOD.")
+                      help="Set to Yes when making a tomogram and No when "
+                           "making a tilt-series. This way the output orientation "
+                           "will be similar to IMOD.")
 
         form.addParam('roiArea', params.StringParam, default='',
                       condition="not useInputProt",
@@ -374,13 +374,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMin(ts.getFirstItem().getTiltAngle())
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
-            acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
+            acquisition.setAccumDose(ts.getAcquisition().getAccumDose())
             acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
             newTomogram.setTsId(tsId)
 
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
+            outputSetOfTomograms.updateDim()
             outputSetOfTomograms.write()
             self._store(outputSetOfTomograms)
         else:
@@ -409,10 +410,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                                           (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                         newTi.setSamplingRate(self._getOutputSampling())
                         newTs.append(newTi)
+                        accumDose = acq.getAccumDose()
 
-                # set tilt axis angle to 0 as TS is now aligned
                 acq = newTs.getAcquisition()
-                acq.setTiltAxisAngle(0.0)
+                acq.setTiltAxisAngle(0.0)  # set tilt axis angle to 0 as TS is now aligned
+                acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
                 newTs.setAcquisition(acq)
 
                 dims = self._getOutputDim(newTi.getFileName())
@@ -499,8 +501,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             summary.append("Output is not ready yet.")
 
         if self._saveInterpolated():
-            summary.append("*Interpolated TS stack is produced, "
-                           "where a few dark tilt images may been removed.*")
+            summary.append("*Interpolated TS stack may have a few "
+                           "dark tilt images removed.*")
 
         return summary
 
@@ -572,7 +574,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         return getattr(self, outputName)
 
     def getAngleStepFromSeries(self, ts):
-        """ This method return the average angles step from a series. """
+        """ This method return the average angle step from a series. """
         angleStepAverage = 0
         for i in range(1, ts.getSize()):
             angleStepAverage += abs(ts[i].getTiltAngle() - ts[i+1].getTiltAngle())
@@ -597,19 +599,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
     def _generateTltFile(self, ts, outputFn):
         """ Generate .tlt file with tilt angles and accumulated dose. """
-        tsList = []
+        angleList = []
 
-        for index, ti in enumerate(ts):
+        for ti in ts.iterItems():
             accDose = ti.getAcquisition().getAccumDose()
             tAngle = ti.getTiltAngle()
-            tsList.append((tAngle, accDose))
+            angleList.append((tAngle, accDose))
 
         with open(outputFn, 'w') as f:
             if self.doDW:
-                for i in tsList:
-                    f.write("%0.3f %0.3f\n" % (i[0], i[1]))
+                f.writelines(f"{i[0]:0.3f} {i[1]:0.3f}\n" for i in angleList)
             else:
-                f.writelines("%0.3f\n" % i[0] for i in tsList)
+                f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 
     def _readAlnFile(self, fn):
         """ Read output alignment file:

@@ -65,7 +65,7 @@ class TestAreTomo(TestAreTomoBase):
     def test_alignAndReconstruct(self):
         print(magentaStr("\n==> Importing data - TiltSeries:"))
         protImport = self._runImportTiltSeries()
-        print(magentaStr("\n==> Testing AreTomo:"))
+        print(magentaStr("\n==> Testing AreTomo (align and reconstruct):"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=protImport.outputTiltSeries,
                                 tomoThickness=200, alignZ=180, tiltAxisAngle=-12.5)
@@ -76,7 +76,7 @@ class TestAreTomo(TestAreTomoBase):
     def test_align(self):
         print(magentaStr("\n==> Importing data - TiltSeries:"))
         protImport = self._runImportTiltSeries()
-        print(magentaStr("\n==> Testing AreTomo:"))
+        print(magentaStr("\n==> Testing AreTomo (align only):"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=protImport.outputTiltSeries,
                                 makeTomo=False, alignZ=180, tiltAxisAngle=-12.5)
