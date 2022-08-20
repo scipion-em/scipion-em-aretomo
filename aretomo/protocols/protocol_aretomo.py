@@ -28,6 +28,7 @@
 
 import os
 from glob import glob
+import numpy as np
 
 import pyworkflow.protocol.params as params
 from pyworkflow.constants import BETA
@@ -38,10 +39,17 @@ from pwem.objects import Transform
 from pwem.emlib.image import ImageHandler
 
 from tomo.protocols import ProtTomoBase
-from tomo.objects import Tomogram, TomoAcquisition, TiltSeries, TiltImage
+from tomo.objects import (Tomogram, TomoAcquisition, TiltSeries,
+                          TiltImage, SetOfTomograms, SetOfTiltSeries)
 
 from .. import Plugin
+from ..convert import getTransformationMatrix, readAlnFile
 from ..constants import *
+
+
+OUT_TS = "outputSetOfTiltSeries"
+OUT_TS_ALN = "outputInterpolatedSetOfTiltSeries"
+OUT_TOMO = "outputSetOfTomograms"
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
@@ -51,6 +59,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
+    _possibleOutputs = {OUT_TS: SetOfTiltSeries,
+                        OUT_TS_ALN: SetOfTiltSeries,
+                        OUT_TOMO: SetOfTomograms}
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -80,6 +91,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       default=True, label='Reconstruct tomogram?',
                       help='You can skip tomogram reconstruction, so that input '
                            'tilt-series will be only aligned.')
+
+        form.addParam('saveStack', params.BooleanParam,
+                      condition="not makeTomo and not skipAlign",
+                      default=True, label="Save interpolated aligned TS?",
+                      help="Choose No to discard aligned stacks.")
 
         form.addParam('useInputProt', params.BooleanParam, default=False,
                       condition="not skipAlign",
@@ -132,7 +148,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                                "series collected within the same tilt range may have different "
                                "orientations of missing wedges.")
 
-        if Plugin.versionGE(V1_0_12):
             form.addParam('refineTiltAxis', params.EnumParam,
                           condition="not useInputProt",
                           choices=['No',
@@ -169,10 +184,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "that makes dense structures dark.")
 
         form.addParam('flipVol', params.BooleanParam,
-                      default=self._flipOutputVol(),
+                      default=True,
                       label="Flip volume?",
-                      help="This saves x-y volume slices according to their Z "
-                           "coordinates, similar to IMOD.")
+                      help="Set to Yes when making a tomogram and No when "
+                           "making a tilt-series. This way the output orientation "
+                           "will be similar to IMOD.")
 
         form.addParam('roiArea', params.StringParam, default='',
                       condition="not useInputProt",
@@ -219,6 +235,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         line.addParam('patchY', params.IntParam, default=5,
                       label='Y')
 
+        form.addParam('darkTol', params.FloatParam, default=0.7,
+                      important=True,
+                      label="Dark tolerance",
+                      help="Set tolerance for removing dark images. The range is "
+                           "in (0, 1). The default value is 0.7. "
+                           "The higher value is more restrictive.")
+
         form.addParam('extraParams', params.StringParam, default='',
                       expertLevel=params.LEVEL_ADVANCED,
                       label='Additional parameters',
@@ -244,15 +267,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         pwutils.makePath(tmpPrefix)
         pwutils.makePath(extraPrefix)
 
-        """Apply the transformation for the input tilt-series"""
+        # Apply the transformation for the input tilt-series
         outputTsFileName = self.getFilePath(tsObjId, tmpPrefix, ".mrc")
         ts.applyTransform(outputTsFileName)
 
-        """Generate angle file"""
+        # Generate angle file
         angleFilePath = self.getFilePath(tsObjId, tmpPrefix, ".tlt")
         self._generateTltFile(ts, angleFilePath)
 
         if self.useInputProt:
+            # Find and copy aln file
             protExtra = self.inputProt.get()._getExtraPath(tsId)
             protAlnBase = self.getFilePath(tsObjId, protExtra, ".aln").replace("_even", "*").replace("_odd", "*")
             protAln = glob(protAlnBase)
@@ -285,6 +309,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
             '-OutXF': 1,  # generate IMOD-compatible file
             '-Defoc': 0,  # disable defocus correction
+            '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
         }
 
@@ -349,51 +374,107 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMin(ts.getFirstItem().getTiltAngle())
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
-            acquisition.setAccumDose(ts.getFirstItem().getAcquisition().getAccumDose())
+            acquisition.setAccumDose(ts.getAcquisition().getAccumDose())
             acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
-            newTomogram.setTsId(ts.getTsId())
+            newTomogram.setTsId(tsId)
 
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
+            outputSetOfTomograms.updateDim()
             outputSetOfTomograms.write()
+            self._store(outputSetOfTomograms)
         else:
-            outputSetOfTiltSeries = self.getOutputSetOfTiltSeries()
+            secs, rots, tilts = readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
+            alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
 
-            newTs = TiltSeries(tsId=tsId)
+            if self._saveInterpolated():
+                # Create new set of aligned TS with potentially fewer tilts included
+                outTsAligned = self.getOutputSetOfTiltSeries(OUT_TS_ALN)
+                newTs = TiltSeries(tsId=tsId)
+                newTs.copyInfo(ts)
+                outTsAligned.append(newTs)
+                newTs.setSamplingRate(self._getOutputSampling())
+                accumDose = 0.
+
+                for secNum, tiltImage in enumerate(ts.iterItems()):
+                    if secNum in secs:
+                        newTi = TiltImage()
+                        newTi.copyInfo(tiltImage, copyTM=False)
+
+                        acq = tiltImage.getAcquisition()
+                        acq.setTiltAxisAngle(0.0)
+                        newTi.setAcquisition(acq)
+
+                        newTi.setTiltAngle(tilts[secs.index(secNum)])
+                        newTi.setLocation(secs.index(secNum) + 1,
+                                          (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
+                        newTi.setSamplingRate(self._getOutputSampling())
+                        newTs.append(newTi)
+                        accumDose = acq.getAccumDose()
+
+                acq = newTs.getAcquisition()
+                acq.setTiltAxisAngle(0.0)  # set tilt axis angle to 0 as TS is now aligned
+                acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
+                newTs.setAcquisition(acq)
+
+                dims = self._getOutputDim(newTi.getFileName())
+                newTs.setDim(dims)
+                newTs.write(properties=False)
+
+                outTsAligned.update(newTs)
+                outTsAligned.updateDim()
+                outTsAligned.write()
+                self._store(outTsAligned)
+
+            else:
+                # remove aligned stack from output
+                pwutils.cleanPath(self.getFilePath(tsObjId, extraPrefix, ".mrc"))
+
+            # Save original TS stack with new alignment
+            outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
+            newTs = ts.clone()
             newTs.copyInfo(ts)
             outputSetOfTiltSeries.append(newTs)
-            newTs.setSamplingRate(self._getOutputSampling())
-
-            secs, rots, tilts = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
+            newTs.setSamplingRate(self._getInputSampling())
 
             for secNum, tiltImage in enumerate(ts.iterItems()):
-                if secNum in secs:
-                    newTi = TiltImage()
-                    newTi.copyInfo(tiltImage, copyTM=False)
+                newTi = tiltImage.clone()
+                newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
+                transform = Transform()
 
+                if secNum not in secs:
+                    newTi.setEnabled(False)
+                    frameMatrix = np.zeros((3, 3))
+                    frameMatrix[2, 2] = 1.0
+                    transform.setMatrix(frameMatrix)
+                else:
+                    # set tilt angles
                     acq = tiltImage.getAcquisition()
-                    acq.setTiltAxisAngle(0.0)
+                    acq.setTiltAxisAngle(rots[secs.index(secNum)])
                     newTi.setAcquisition(acq)
-
                     newTi.setTiltAngle(tilts[secs.index(secNum)])
-                    newTi.setLocation(secs.index(secNum) + 1,
-                                      (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
-                    newTi.setSamplingRate(self._getOutputSampling())
-                    newTs.append(newTi)
 
-            # set tilt axis angle to 0 as TS is now aligned
+                    # set Transform
+                    alignmentMatrix = getTransformationMatrix(alignFn)
+                    transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
+
+                newTi.setTransform(transform)
+                newTi.setSamplingRate(self._getInputSampling())
+                newTs.append(newTi)
+
+            # update tilt axis angle for TS with the first value only
             acq = newTs.getAcquisition()
-            acq.setTiltAxisAngle(0.0)
+            acq.setTiltAxisAngle(rots[0])
             newTs.setAcquisition(acq)
 
-            dims = self._getOutputDim(newTi.getFileName())
-            newTs.setDim(dims)
+            newTs.setDim(self._getSetOfTiltSeries().getDim())
             newTs.write(properties=False)
 
             outputSetOfTiltSeries.update(newTs)
             outputSetOfTiltSeries.updateDim()
             outputSetOfTiltSeries.write()
+            self._store(outputSetOfTiltSeries)
 
         self._store()
 
@@ -401,22 +482,29 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         if self.makeTomo:
             self.getOutputSetOfTomograms().setStreamState(Set.STREAM_CLOSED)
         else:
-            self.getOutputSetOfTiltSeries().setStreamState(Set.STREAM_CLOSED)
+            if self._saveInterpolated():
+                self.getOutputSetOfTiltSeries(OUT_TS_ALN).setStreamState(Set.STREAM_CLOSED)
+            self.getOutputSetOfTiltSeries(OUT_TS).setStreamState(Set.STREAM_CLOSED)
         self._store()
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
-        if hasattr(self, 'outputSetOfTomograms'):
+        if hasattr(self, OUT_TOMO):
             summary.append("Input Tilt-Series: %d.\nTomograms reconstructed: %d.\n"
                            % (self._getSetOfTiltSeries().getSize(),
                               self.outputSetOfTomograms.getSize()))
-        elif hasattr(self, 'outputSetOfTiltSeries'):
+        elif hasattr(self, OUT_TS):
             summary.append("Input Tilt-Series: %d.\nTilt series aligned: %d.\n"
                            % (self._getSetOfTiltSeries().getSize(),
                               self.outputSetOfTiltSeries.getSize()))
         else:
             summary.append("Output is not ready yet.")
+
+        if self._saveInterpolated():
+            summary.append("*Interpolated TS stack may have a few "
+                           "dark tilt images removed.*")
+
         return summary
 
     def _methods(self):
@@ -455,35 +543,39 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                             ts.getFirstItem().parseFileName(extension=ext))
 
     def getOutputSetOfTomograms(self):
-        if hasattr(self, "outputSetOfTomograms"):
+        if hasattr(self, OUT_TOMO):
             self.outputSetOfTomograms.enableAppend()
         else:
             outputSetOfTomograms = self._createSetOfTomograms()
             outputSetOfTomograms.copyInfo(self._getSetOfTiltSeries())
             outputSetOfTomograms.setSamplingRate(self._getOutputSampling())
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(outputSetOfTomograms=outputSetOfTomograms)
+            self._defineOutputs(**{OUT_TOMO: outputSetOfTomograms})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTomograms)
         return self.outputSetOfTomograms
 
-    def getOutputSetOfTiltSeries(self):
-        if hasattr(self, "outputSetOfTiltSeries"):
-            self.outputSetOfTiltSeries.enableAppend()
+    def getOutputSetOfTiltSeries(self, outputName=OUT_TS):
+        if hasattr(self, outputName):
+            getattr(self, outputName).enableAppend()
         else:
-            outputSetOfTiltSeries = self._createSetOfTiltSeries()
+            suffix = "_interpolated" if outputName == OUT_TS_ALN else ""
+            outputSetOfTiltSeries = self._createSetOfTiltSeries(suffix=suffix)
             outputSetOfTiltSeries.copyInfo(self._getSetOfTiltSeries())
             # Dimensions will be updated later
             outputSetOfTiltSeries.setDim(self._getSetOfTiltSeries().getDim())
-            outputSetOfTiltSeries.setSamplingRate(self._getOutputSampling())
+            if outputName == OUT_TS_ALN:
+                outputSetOfTiltSeries.setSamplingRate(self._getOutputSampling())
+            else:
+                outputSetOfTiltSeries.setSamplingRate(self._getInputSampling())
             outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(outputSetOfTiltSeries=outputSetOfTiltSeries)
+            self._defineOutputs(**{outputName: outputSetOfTiltSeries})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTiltSeries)
-        return self.outputSetOfTiltSeries
+        return getattr(self, outputName)
 
     def getAngleStepFromSeries(self, ts):
-        """ This method return the average angles step from a series. """
+        """ This method return the average angle step from a series. """
         angleStepAverage = 0
         for i in range(1, ts.getSize()):
             angleStepAverage += abs(ts[i].getTiltAngle() - ts[i+1].getTiltAngle())
@@ -498,6 +590,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _getOutputSampling(self):
         return self._getSetOfTiltSeries().getSamplingRate() * self.binFactor.get()
 
+    def _getInputSampling(self):
+        return self._getSetOfTiltSeries().getSamplingRate()
+
     def _getOutputDim(self, fn):
         ih = ImageHandler()
         x, y, z, _ = ih.getDimensions(fn)
@@ -505,44 +600,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
     def _generateTltFile(self, ts, outputFn):
         """ Generate .tlt file with tilt angles and accumulated dose. """
-        tsList = []
+        angleList = []
 
-        for index, ti in enumerate(ts):
+        for ti in ts.iterItems():
             accDose = ti.getAcquisition().getAccumDose()
             tAngle = ti.getTiltAngle()
-            tsList.append((tAngle, accDose))
+            angleList.append((tAngle, accDose))
 
         with open(outputFn, 'w') as f:
             if self.doDW:
-                for i in tsList:
-                    f.write("%0.3f %0.3f\n" % (i[0], i[1]))
+                f.writelines(f"{i[0]:0.3f} {i[1]:0.3f}\n" for i in angleList)
             else:
-                f.writelines("%0.3f\n" % i[0] for i in tsList)
+                f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 
-    def _readAlnFile(self, fn):
-        """ Read output alignment file:
-            - section number (SEC, 0-indexed)
-            - tilt axis offset (ROT)
-            - refined tilt angles (TILT)
-        """
-        secs, rots, tilts = [], [], []
-        header = 0
-        with open(fn, 'r') as f:
-            line = f.readline()
-            while line:
-                if line.startswith("#"):
-                    header += 1
-                elif header > 3:
-                    break
-                else:
-                    values = line.strip().split()
-                    secs.append(int(values[0]))
-                    rots.append(float(values[1]))
-                    tilts.append(float(values[-1]))
-                line = f.readline()
-
-        return secs, rots, tilts
-
-    def _flipOutputVol(self):
-        """ From v1.0.12 flip is no longer required. """
-        return not Plugin.versionGE(V1_0_12)
+    def _saveInterpolated(self):
+        return self.saveStack

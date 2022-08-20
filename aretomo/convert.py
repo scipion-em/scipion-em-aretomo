@@ -53,3 +53,21 @@ def getTransformationMatrix(matrixFile):
         i += 1
 
     return frameMatrix
+
+
+def readAlnFile(fn):
+    """ Read output alignment file:
+        - section number (SEC, 0-indexed)
+        - tilt axis offset (ROT)
+        - refined tilt angles (TILT)
+    """
+    with open(fn, 'r') as f:
+        f.readline()
+        numSec = f.readline().strip("#").split()[0]
+
+    arr = np.loadtxt(fn, dtype=float, comments='#', max_rows=int(numSec))
+    secs = list(map(int, arr[:, 0]))
+    rots = arr[:, 1]
+    tilts = arr[:, -1]
+
+    return secs, rots, tilts
