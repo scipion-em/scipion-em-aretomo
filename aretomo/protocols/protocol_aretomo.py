@@ -43,7 +43,7 @@ from tomo.objects import (Tomogram, TomoAcquisition, TiltSeries,
                           TiltImage, SetOfTomograms, SetOfTiltSeries)
 
 from .. import Plugin
-from ..convert import getTransformationMatrix
+from ..convert import getTransformationMatrix, readAlnFile
 from ..constants import *
 
 
@@ -385,7 +385,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTomograms.write()
             self._store(outputSetOfTomograms)
         else:
-            secs, rots, tilts = self._readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
+            secs, rots, tilts = readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
             alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
 
             if self._saveInterpolated():
@@ -395,6 +395,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTs.copyInfo(ts)
                 outTsAligned.append(newTs)
                 newTs.setSamplingRate(self._getOutputSampling())
+                accumDose = 0.
 
                 for secNum, tiltImage in enumerate(ts.iterItems()):
                     if secNum in secs:
@@ -611,30 +612,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 f.writelines(f"{i[0]:0.3f} {i[1]:0.3f}\n" for i in angleList)
             else:
                 f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
-
-    def _readAlnFile(self, fn):
-        """ Read output alignment file:
-            - section number (SEC, 0-indexed)
-            - tilt axis offset (ROT)
-            - refined tilt angles (TILT)
-        """
-        secs, rots, tilts = [], [], []
-        header = 0
-        with open(fn, 'r') as f:
-            line = f.readline()
-            while line:
-                if line.startswith("#"):
-                    header += 1
-                elif header > 3:
-                    break
-                else:
-                    values = line.strip().split()
-                    secs.append(int(values[0]))
-                    rots.append(float(values[1]))
-                    tilts.append(float(values[-1]))
-                line = f.readline()
-
-        return secs, rots, tilts
 
     def _saveInterpolated(self):
         return self.saveStack
