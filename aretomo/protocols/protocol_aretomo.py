@@ -375,7 +375,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
             acquisition.setAccumDose(ts.getAcquisition().getAccumDose())
-            acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
             newTomogram.setTsId(tsId)
 
@@ -403,7 +402,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                         newTi.copyInfo(tiltImage, copyTM=False)
 
                         acq = tiltImage.getAcquisition()
-                        acq.setTiltAxisAngle(0.0)
                         newTi.setAcquisition(acq)
 
                         newTi.setTiltAngle(tilts[secs.index(secNum)])
@@ -414,7 +412,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                         accumDose = acq.getAccumDose()
 
                 acq = newTs.getAcquisition()
-                acq.setTiltAxisAngle(0.0)  # set tilt axis angle to 0 as TS is now aligned
                 acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
                 newTs.setAcquisition(acq)
 
