@@ -453,7 +453,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                     newTi.setTiltAngle(tilts[secs.index(secNum)])
 
                     # set Transform
-                    alignmentMatrix = getTransformationMatrix(alignFn)
+                    alignmentMatrix = getTransformationMatrix(alignFn,
+                                                              scale=self.binFactor.get())
                     transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
 
                 newTi.setTransform(transform)
