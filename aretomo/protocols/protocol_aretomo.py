@@ -184,6 +184,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "that makes dense structures dark.")
 
         form.addParam('flipVol', params.BooleanParam,
+                      condition="makeTomo",
                       default=True,
                       label="Flip volume?",
                       help="Set to Yes when making a tomogram and No when "
@@ -303,7 +304,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
             '-FlipInt': 1 if self.flipInt else 0,
-            '-FlipVol': 1 if self.flipVol else 0,
+            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
