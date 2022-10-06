@@ -184,6 +184,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "that makes dense structures dark.")
 
         form.addParam('flipVol', params.BooleanParam,
+                      condition="makeTomo",
                       default=True,
                       label="Flip volume?",
                       help="Set to Yes when making a tomogram and No when "
@@ -303,7 +304,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
             '-FlipInt': 1 if self.flipInt else 0,
-            '-FlipVol': 1 if self.flipVol else 0,
+            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
@@ -375,7 +376,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
             acquisition.setStep(self.getAngleStepFromSeries(ts))
             acquisition.setAccumDose(ts.getAcquisition().getAccumDose())
-            acquisition.setTiltAxisAngle(0.0)
             newTomogram.setAcquisition(acquisition)
             newTomogram.setTsId(tsId)
 
@@ -403,7 +403,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                         newTi.copyInfo(tiltImage, copyTM=False)
 
                         acq = tiltImage.getAcquisition()
-                        acq.setTiltAxisAngle(0.0)
                         newTi.setAcquisition(acq)
 
                         newTi.setTiltAngle(tilts[secs.index(secNum)])
@@ -414,7 +413,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                         accumDose = acq.getAccumDose()
 
                 acq = newTs.getAcquisition()
-                acq.setTiltAxisAngle(0.0)  # set tilt axis angle to 0 as TS is now aligned
                 acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
                 newTs.setAcquisition(acq)
 
@@ -456,7 +454,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                     newTi.setTiltAngle(tilts[secs.index(secNum)])
 
                     # set Transform
-                    alignmentMatrix = getTransformationMatrix(alignFn)
+                    alignmentMatrix = getTransformationMatrix(alignFn,
+                                                              scale=self.binFactor.get())
                     transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
 
                 newTi.setTransform(transform)

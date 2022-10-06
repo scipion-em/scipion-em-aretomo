@@ -1,3 +1,7 @@
+3.2:
+ - fixed output TS shifts scaling when using binning
+ - hide flip volume option when not making a tomo
+ - guess cuda version
 3.1:
  - add possible outputs class
  - two default TS outputs: aligned (interpolated) TS and original (with alignment metadata)
