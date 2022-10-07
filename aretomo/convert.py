@@ -27,7 +27,7 @@
 import numpy as np
 
 
-def getTransformationMatrix(matrixFile, scale=1.0):
+def getTransformationMatrix(matrixFile):
     """ This method takes an IMOD-based transformation matrix file (*.xf) path and
     returns a 3D matrix containing the transformation matrices for each
     tilt-image belonging to the tilt-series. """
@@ -45,8 +45,8 @@ def getTransformationMatrix(matrixFile, scale=1.0):
         frameMatrix[1, 0, i] = float(values[2])
         frameMatrix[0, 1, i] = float(values[1])
         frameMatrix[1, 1, i] = float(values[3])
-        frameMatrix[0, 2, i] = float(values[4]) * scale
-        frameMatrix[1, 2, i] = float(values[5]) * scale
+        frameMatrix[0, 2, i] = float(values[4])
+        frameMatrix[1, 2, i] = float(values[5])
         frameMatrix[2, 0, i] = 0.0
         frameMatrix[2, 1, i] = 0.0
         frameMatrix[2, 2, i] = 1.0
