@@ -1,3 +1,4 @@
+3.4: always output stack with alignment info
 3.3: scaling should not be applied to transforms, as xf refers to original TS
 3.2:
  - fixed output TS shifts scaling when using binning
