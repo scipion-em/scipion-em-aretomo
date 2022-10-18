@@ -308,7 +308,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
-            '-OutXF': 1,  # generate IMOD-compatible file
             '-Defoc': 0,  # disable defocus correction
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
@@ -355,8 +354,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         ts = self._getSetOfTiltSeries()[tsObjId]
         tsId = ts.getTsId()
         extraPrefix = self._getExtraPath(tsId)
-        secs, rots, tilts = readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
-        alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
+        sec_nums, imod_matrix, tilt_angs, tilt_axes = readAlnFile(
+            self.getFilePath(tsObjId, extraPrefix, ".aln"))
+        alignmentMatrix = getTransformationMatrix(imod_matrix)
 
         if self.makeTomo:
             outputSetOfTomograms = self.getOutputSetOfTomograms()
@@ -397,15 +397,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 accumDose = 0.
 
                 for secNum, tiltImage in enumerate(ts.iterItems()):
-                    if secNum in secs:
+                    if secNum in sec_nums:
                         newTi = TiltImage()
                         newTi.copyInfo(tiltImage, copyTM=False)
 
                         acq = tiltImage.getAcquisition()
                         newTi.setAcquisition(acq)
 
-                        newTi.setTiltAngle(tilts[secs.index(secNum)])
-                        newTi.setLocation(secs.index(secNum) + 1,
+                        newTi.setTiltAngle(tilt_angs[sec_nums.index(secNum)])
+                        newTi.setLocation(sec_nums.index(secNum) + 1,
                                           (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                         newTi.setSamplingRate(self._getOutputSampling())
                         newTs.append(newTi)
@@ -439,7 +439,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
             transform = Transform()
 
-            if secNum not in secs:
+            if secNum not in sec_nums:
                 newTi.setEnabled(False)
                 frameMatrix = np.zeros((3, 3))
                 frameMatrix[2, 2] = 1.0
@@ -447,13 +447,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             else:
                 # set tilt angles
                 acq = tiltImage.getAcquisition()
-                acq.setTiltAxisAngle(rots[secs.index(secNum)])
+                acq.setTiltAxisAngle(tilt_axes[sec_nums.index(secNum)])
                 newTi.setAcquisition(acq)
-                newTi.setTiltAngle(tilts[secs.index(secNum)])
+                newTi.setTiltAngle(tilt_angs[sec_nums.index(secNum)])
 
                 # set Transform
-                alignmentMatrix = getTransformationMatrix(alignFn)
-                transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
+                m = alignmentMatrix[:, :, sec_nums.index(secNum)]
+                self.debug(f"Section {secNum}: {tilt_axes[sec_nums.index(secNum)]}, "
+                           f"{tilt_angs[sec_nums.index(secNum)]}")
+                transform.setMatrix(m)
 
             newTi.setTransform(transform)
             newTi.setSamplingRate(self._getInputSampling())
@@ -461,7 +463,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         # update tilt axis angle for TS with the first value only
         acq = newTs.getAcquisition()
-        acq.setTiltAxisAngle(rots[0])
+        acq.setTiltAxisAngle(tilt_axes[0])
         newTs.setAcquisition(acq)
 
         newTs.setDim(self._getSetOfTiltSeries().getDim())

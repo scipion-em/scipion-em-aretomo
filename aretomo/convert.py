@@ -27,47 +27,52 @@
 import numpy as np
 
 
-def getTransformationMatrix(matrixFile):
-    """ This method takes an IMOD-based transformation matrix file (*.xf) path and
+def getTransformationMatrix(matrix):
+    """ This method takes an IMOD-based transformation matrix (*.xf) and
     returns a 3D matrix containing the transformation matrices for each
     tilt-image belonging to the tilt-series. """
 
-    with open(matrixFile, "r") as matrix:
-        lines = matrix.readlines()
-
-    numberLines = len(lines)
+    numberLines = matrix.shape[0]
     frameMatrix = np.empty([3, 3, numberLines])
 
-    i = 0
-    for line in lines:
-        values = line.split()
-        frameMatrix[0, 0, i] = float(values[0])
-        frameMatrix[1, 0, i] = float(values[2])
-        frameMatrix[0, 1, i] = float(values[1])
-        frameMatrix[1, 1, i] = float(values[3])
-        frameMatrix[0, 2, i] = float(values[4])
-        frameMatrix[1, 2, i] = float(values[5])
-        frameMatrix[2, 0, i] = 0.0
-        frameMatrix[2, 1, i] = 0.0
-        frameMatrix[2, 2, i] = 1.0
-        i += 1
+    for row in range(numberLines):
+        frameMatrix[0, 0, row] = matrix[row][0]
+        frameMatrix[1, 0, row] = matrix[row][2]
+        frameMatrix[0, 1, row] = matrix[row][1]
+        frameMatrix[1, 1, row] = matrix[row][3]
+        frameMatrix[0, 2, row] = matrix[row][4]
+        frameMatrix[1, 2, row] = matrix[row][5]
+        frameMatrix[2, 0, row] = 0.0
+        frameMatrix[2, 1, row] = 0.0
+        frameMatrix[2, 2, row] = 1.0
 
     return frameMatrix
 
 
-def readAlnFile(fn):
-    """ Read output alignment file:
-        - section number (SEC, 0-indexed)
-        - tilt axis offset (ROT)
-        - refined tilt angles (TILT)
+def readAlnFile(alignFn):
+    """ Read AreTomo output alignment file (.aln):
+    aln2xf conversion taken from https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py
     """
-    with open(fn, 'r') as f:
+    # Read number of sections, as we need to ignore local alignments part of the file
+    with open(alignFn) as f:
         f.readline()
         numSec = f.readline().strip("#").split()[0]
 
-    arr = np.loadtxt(fn, dtype=float, comments='#', max_rows=int(numSec))
-    secs = list(map(int, arr[:, 0]))
-    rots = arr[:, 1]
-    tilts = arr[:, -1]
+    data = np.loadtxt(alignFn, dtype=float, comments='#', max_rows=int(numSec))
+    sec_nums = list(data[:, 0].astype(int))  # SEC
+    tilt_angs = data[:, -1]  # TILT
+    tilt_axes = data[:, 1]  # ROT
+    angles = -np.radians(data[:, 1])  # ROT
+    shifts = data[:, [3, 4]]  # TX, TY
 
-    return secs, rots, tilts
+    c, s = np.cos(angles), np.sin(angles)
+    rot = np.empty((len(angles), 2, 2))
+    rot[:, 0, 0] = c
+    rot[:, 0, 1] = -s
+    rot[:, 1, 0] = s
+    rot[:, 1, 1] = c
+
+    shifts_rot = np.einsum('ijk,ik->ij', rot, shifts)
+    imod_matrix = np.concatenate([rot.reshape(-1, 4), -shifts_rot], axis=1)
+
+    return sec_nums, imod_matrix, tilt_angs, tilt_axes

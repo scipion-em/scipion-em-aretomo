@@ -1,3 +1,7 @@
+3.5:
+ - get rid of xf file conversion, use aln directly
+ - add aretomo 1.3.0
+ - update citation
 3.4: always output stack with alignment info
 3.3: scaling should not be applied to transforms, as xf refers to original TS
 3.2:
