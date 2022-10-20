@@ -308,7 +308,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
             '-Cs': tsSet.getAcquisition().getSphericalAberration(),
-            '-OutXF': 1,  # generate IMOD-compatible file
             '-Defoc': 0,  # disable defocus correction
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
@@ -355,8 +354,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         ts = self._getSetOfTiltSeries()[tsObjId]
         tsId = ts.getTsId()
         extraPrefix = self._getExtraPath(tsId)
-        secs, rots, tilts = readAlnFile(self.getFilePath(tsObjId, extraPrefix, ".aln"))
-        alignFn = self.getFilePath(tsObjId, extraPrefix, ".xf")
+
+        if not (self.makeTomo and self.skipAlign):
+            sec_nums, imod_matrix, tilt_angs, tilt_axes = readAlnFile(
+                self.getFilePath(tsObjId, extraPrefix, ".aln"),
+                newVersion=Plugin.versionGE("1.3.0"))
+            alignmentMatrix = getTransformationMatrix(imod_matrix)
 
         if self.makeTomo:
             outputSetOfTomograms = self.getOutputSetOfTomograms()
@@ -397,15 +400,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 accumDose = 0.
 
                 for secNum, tiltImage in enumerate(ts.iterItems()):
-                    if secNum in secs:
+                    if secNum in sec_nums:
                         newTi = TiltImage()
                         newTi.copyInfo(tiltImage, copyTM=False)
 
                         acq = tiltImage.getAcquisition()
                         newTi.setAcquisition(acq)
 
-                        newTi.setTiltAngle(tilts[secs.index(secNum)])
-                        newTi.setLocation(secs.index(secNum) + 1,
+                        newTi.setTiltAngle(tilt_angs[sec_nums.index(secNum)])
+                        newTi.setLocation(sec_nums.index(secNum) + 1,
                                           (self.getFilePath(tsObjId, extraPrefix, ".mrc")))
                         newTi.setSamplingRate(self._getOutputSampling())
                         newTs.append(newTi)
@@ -427,55 +430,60 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 # remove aligned stack from output
                 pwutils.cleanPath(self.getFilePath(tsObjId, extraPrefix, ".mrc"))
 
-        # Save original TS stack with new alignment
-        outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
-        newTs = ts.clone()
-        newTs.copyInfo(ts)
-        outputSetOfTiltSeries.append(newTs)
-        newTs.setSamplingRate(self._getInputSampling())
+        # Save original TS stack with new alignment,
+        # unless making a tomo from pre-aligned TS
+        if not (self.makeTomo and self.skipAlign):
+            outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
+            newTs = ts.clone()
+            newTs.copyInfo(ts)
+            outputSetOfTiltSeries.append(newTs)
+            newTs.setSamplingRate(self._getInputSampling())
 
-        for secNum, tiltImage in enumerate(ts.iterItems()):
-            newTi = tiltImage.clone()
-            newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
-            transform = Transform()
+            for secNum, tiltImage in enumerate(ts.iterItems()):
+                newTi = tiltImage.clone()
+                newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
+                transform = Transform()
 
-            if secNum not in secs:
-                newTi.setEnabled(False)
-                frameMatrix = np.zeros((3, 3))
-                frameMatrix[2, 2] = 1.0
-                transform.setMatrix(frameMatrix)
-            else:
-                # set tilt angles
-                acq = tiltImage.getAcquisition()
-                acq.setTiltAxisAngle(rots[secs.index(secNum)])
-                newTi.setAcquisition(acq)
-                newTi.setTiltAngle(tilts[secs.index(secNum)])
+                if secNum not in sec_nums:
+                    newTi.setEnabled(False)
+                    frameMatrix = np.zeros((3, 3))
+                    frameMatrix[2, 2] = 1.0
+                    transform.setMatrix(frameMatrix)
+                else:
+                    # set tilt angles
+                    acq = tiltImage.getAcquisition()
+                    acq.setTiltAxisAngle(tilt_axes[sec_nums.index(secNum)])
+                    newTi.setAcquisition(acq)
+                    newTi.setTiltAngle(tilt_angs[sec_nums.index(secNum)])
 
-                # set Transform
-                alignmentMatrix = getTransformationMatrix(alignFn)
-                transform.setMatrix(alignmentMatrix[:, :, secs.index(secNum)])
+                    # set Transform
+                    m = alignmentMatrix[:, :, sec_nums.index(secNum)]
+                    self.debug(f"Section {secNum}: {tilt_axes[sec_nums.index(secNum)]}, "
+                               f"{tilt_angs[sec_nums.index(secNum)]}")
+                    transform.setMatrix(m)
 
-            newTi.setTransform(transform)
-            newTi.setSamplingRate(self._getInputSampling())
-            newTs.append(newTi)
+                newTi.setTransform(transform)
+                newTi.setSamplingRate(self._getInputSampling())
+                newTs.append(newTi)
 
-        # update tilt axis angle for TS with the first value only
-        acq = newTs.getAcquisition()
-        acq.setTiltAxisAngle(rots[0])
-        newTs.setAcquisition(acq)
+            # update tilt axis angle for TS with the first value only
+            acq = newTs.getAcquisition()
+            acq.setTiltAxisAngle(tilt_axes[0])
+            newTs.setAcquisition(acq)
 
-        newTs.setDim(self._getSetOfTiltSeries().getDim())
-        newTs.write(properties=False)
+            newTs.setDim(self._getSetOfTiltSeries().getDim())
+            newTs.write(properties=False)
 
-        outputSetOfTiltSeries.update(newTs)
-        outputSetOfTiltSeries.updateDim()
-        outputSetOfTiltSeries.write()
-        self._store(outputSetOfTiltSeries)
+            outputSetOfTiltSeries.update(newTs)
+            outputSetOfTiltSeries.updateDim()
+            outputSetOfTiltSeries.write()
+            self._store(outputSetOfTiltSeries)
 
         self._store()
 
     def closeOutputSetsStep(self):
-        self.getOutputSetOfTiltSeries(OUT_TS).setStreamState(Set.STREAM_CLOSED)
+        if not (self.makeTomo and self.skipAlign):
+            self.getOutputSetOfTiltSeries(OUT_TS).setStreamState(Set.STREAM_CLOSED)
         if self.makeTomo:
             self.getOutputSetOfTomograms().setStreamState(Set.STREAM_CLOSED)
         elif self._saveInterpolated():

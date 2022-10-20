@@ -49,11 +49,10 @@ b) Developer's version
 
         scipion installp -p /path/to/scipion-em-aretomo --devel
 
-AreTomo binaries will be installed automatically with the plugin, but you can also link an existing installation. 
-Default installation path assumed is ``software/em/aretomo-1.2.5``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to
-the folder where the AreTomo is installed. Depending on your CUDA version you might want to change the default binary from ``AreTomo_1.2.5_Cuda101_08-01-2022``
-to a different one by explicitly setting *ARETOMO_BIN* variable. If you need to use CUDA different from the one used during Scipion installation
-(defined by CUDA_LIB), you can add *ARETOMO_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
+* AreTomo binaries will be installed automatically with the plugin, but you can also link an existing installation.
+* Default installation path assumed is ``software/em/aretomo-1.3.0``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to the folder where the AreTomo is installed.
+* Depending on your CUDA version this plugin will guess the right default binary from AreTomo_1.3.0_Cuda%s%s_09292022 (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting ARETOMO_BIN variable.
+* If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *ARETOMO_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
 To check the installation, simply run the following Scipion test:
 
@@ -70,16 +69,16 @@ AreTomo is free for academic use only. For commercial use, please contact David 
 Supported versions
 ------------------
 
-1.0.6, 1.0.8, 1.0.10, 1.0.12, 1.1.0, 1.1.1, 1.2.0, 1.2.5
+1.0.6, 1.0.8, 1.0.10, 1.0.12, 1.1.0, 1.1.1, 1.2.0, 1.2.5, 1.3.0
 
 Protocols
 ---------
 
     * tilt-series align and reconstruct
 
-Detailed manual can be found in ``software/em/aretomo-1.2.5/bin/AreTomoManual-08-01-2022.pdf``
+Detailed manual can be found in ``software/em/aretomo-1.3.0/bin/AreTomoManual_1.3.0_09292022.pdf``
 
 References
 ----------
 
-    * AreTomo: An integrated software package for automated marker-free, motion-corrected cryo-electron tomographic alignment and reconstruction. Shawn Zheng, Georg Wolff, Garrett Greenan, Zhen Chen, Frank G. A. Faas, Montserrat Bárcena, Abraham J. Koster, Yifan Cheng, David Agard. bioRxiv 2022.02.15.480593; doi: https://doi.org/10.1101/2022.02.15.480593
+    * AreTomo: An integrated software package for automated marker-free, motion-corrected cryo-electron tomographic alignment and reconstruction. Shawn Zheng, Georg Wolff, Garrett Greenan, Zhen Chen, Frank G. A. Faas, Montserrat Bárcena, Abraham J. Koster, Yifan Cheng, David Agard. JSB vol. 6, 2022, 100068.

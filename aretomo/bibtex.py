@@ -26,15 +26,16 @@
 # **************************************************************************
 """
 
-@article{Zheng,
-  Title      = "AreTomo",
-  Author     = "Zheng, Shawn and Wolff, Georg and Greenan, Garrett and Chen, Zhen and Faas, Frank G.A. and Bárcena, Montserrat and Koster, Abraham J. and Cheng, Yifan and Agard, David",
-  Journal    = "bioRxiv",
-  Year       = "2022",
-  Pages      = "",
-  Volume     = "",
-  Number     = "",
-  Doi        = "http://dx.doi.org/10.1101/2022.02.15.480593"
+@article{Zheng2022,
+  doi = {10.1016/j.yjsbx.2022.100068},
+  url = {https://doi.org/10.1016/j.yjsbx.2022.100068},
+  year = {2022},
+  publisher = {Elsevier {BV}},
+  volume = {6},
+  pages = {100068},
+  author = {Shawn Zheng and Georg Wolff and Garrett Greenan and Zhen Chen and Frank G.A. Faas and Montserrat B{\'{a}}rcena and Abraham J. Koster and Yifan Cheng and David A. Agard},
+  title = {{AreTomo}: An integrated software package for automated marker-free,  motion-corrected cryo-electron tomographic alignment and reconstruction},
+  journal = {Journal of Structural Biology}
 }
 
 """
