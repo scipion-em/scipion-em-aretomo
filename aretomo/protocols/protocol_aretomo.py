@@ -355,7 +355,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         tsId = ts.getTsId()
         extraPrefix = self._getExtraPath(tsId)
         sec_nums, imod_matrix, tilt_angs, tilt_axes = readAlnFile(
-            self.getFilePath(tsObjId, extraPrefix, ".aln"))
+            self.getFilePath(tsObjId, extraPrefix, ".aln"),
+            newVersion=Plugin.versionGE("1.3.0"))
         alignmentMatrix = getTransformationMatrix(imod_matrix)
 
         if self.makeTomo:

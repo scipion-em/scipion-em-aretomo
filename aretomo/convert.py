@@ -49,14 +49,17 @@ def getTransformationMatrix(matrix):
     return frameMatrix
 
 
-def readAlnFile(alignFn):
+def readAlnFile(alignFn, newVersion=False):
     """ Read AreTomo output alignment file (.aln):
     aln2xf conversion taken from https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py
     """
     # Read number of sections, as we need to ignore local alignments part of the file
     with open(alignFn) as f:
         f.readline()
-        numSec = f.readline().strip("#").split()[0]
+        if newVersion:
+            numSec = f.readline().strip("#").split()[-1]
+        else:
+            numSec = f.readline().strip("#").split()[0]
 
     data = np.loadtxt(alignFn, dtype=float, comments='#', max_rows=int(numSec))
     sec_nums = list(data[:, 0].astype(int))  # SEC
