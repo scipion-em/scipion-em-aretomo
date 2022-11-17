@@ -254,10 +254,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         for ts in self.inputSetOfTiltSeries.get():
-            self._insertFunctionStep('convertInputStep', ts.getObjId())
-            self._insertFunctionStep('runAreTomoStep', ts.getObjId())
-            self._insertFunctionStep('createOutputStep', ts.getObjId())
-        self._insertFunctionStep('closeOutputSetsStep')
+            self._insertFunctionStep(self.convertInputStep, ts.getObjId())
+            self._insertFunctionStep(self.runAreTomoStep, ts.getObjId())
+            self._insertFunctionStep(self.createOutputStep, ts.getObjId())
+        self._insertFunctionStep(self.closeOutputSetsStep)
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsObjId):
@@ -605,7 +605,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         """ Generate .tlt file with tilt angles and accumulated dose. """
         angleList = []
 
-        for ti in ts.iterItems():
+        for ti in ts.iterItems(orderBy="_index"):
             accDose = ti.getAcquisition().getAccumDose()
             tAngle = ti.getTiltAngle()
             angleList.append((tAngle, accDose))
