@@ -399,7 +399,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTs.setSamplingRate(self._getOutputSampling())
                 accumDose = 0.
 
-                for secNum, tiltImage in enumerate(ts.iterItems()):
+                for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
                     if secNum in sec_nums:
                         newTi = TiltImage()
                         newTi.copyInfo(tiltImage, copyTM=False)
@@ -439,7 +439,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             outputSetOfTiltSeries.append(newTs)
             newTs.setSamplingRate(self._getInputSampling())
 
-            for secNum, tiltImage in enumerate(ts.iterItems()):
+            for secNum, tiltImage in enumerate(ts.iterItems(orderBy='_index')):
                 newTi = tiltImage.clone()
                 newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
                 transform = Transform()
