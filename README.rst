@@ -50,8 +50,8 @@ b) Developer's version
         scipion installp -p /path/to/scipion-em-aretomo --devel
 
 * AreTomo binaries will be installed automatically with the plugin, but you can also link an existing installation.
-* Default installation path assumed is ``software/em/aretomo-1.3.0``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to the folder where the AreTomo is installed.
-* Depending on your CUDA version this plugin will guess the right default binary from AreTomo_1.3.0_Cuda%s%s_09292022 (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting ARETOMO_BIN variable.
+* Default installation path assumed is ``software/em/aretomo-1.3.3``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to the folder where the AreTomo is installed.
+* Depending on your CUDA version this plugin will guess the right default binary from AreTomo_1.3.3_CudaXY_11212022 (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting ARETOMO_BIN variable.
 * If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *ARETOMO_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
 
 To check the installation, simply run the following Scipion test:
@@ -69,14 +69,14 @@ AreTomo is free for academic use only. For commercial use, please contact David 
 Supported versions
 ------------------
 
-1.0.6, 1.0.8, 1.0.10, 1.0.12, 1.1.0, 1.1.1, 1.2.0, 1.2.5, 1.3.0
+1.0.6, 1.0.8, 1.0.10, 1.0.12, 1.1.0, 1.1.1, 1.2.0, 1.2.5, 1.3.0, 1.3.3
 
 Protocols
 ---------
 
     * tilt-series align and reconstruct
 
-Detailed manual can be found in ``software/em/aretomo-1.3.0/bin/AreTomoManual_1.3.0_09292022.pdf``
+Detailed manual can be found in ``software/em/aretomo-1.3.3/bin/AreTomoManual_1.3.0_09292022.pdf``
 
 References
 ----------
