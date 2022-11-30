@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.5'
+__version__ = '3.5.1'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -41,17 +41,17 @@ class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
     _supportedVersions = [V1_0_6, V1_0_8, V1_0_10, V1_0_12,
-                          V1_1_0, V1_1_1, V1_2_0, V1_2_5, V1_3_0]
+                          V1_1_0, V1_1_1, V1_2_0, V1_2_5, V1_3_0, V1_3_3]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_3_0)
+        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_3_3)
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB)
-        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.3.0_Cuda%s%s_09292022' % (
+        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.3.3_Cuda%s%s_11212022' % (
             cudaVersion.major, cudaVersion.minor))
 
     @classmethod
@@ -89,4 +89,4 @@ class Plugin(pwem.Plugin):
         for v in cls._supportedVersions:
             env.addPackage('aretomo', version=v,
                            tar='aretomo_v%s.tgz' % v,
-                           default=v == V1_3_0)
+                           default=v == V1_3_3)
