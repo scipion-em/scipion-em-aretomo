@@ -39,8 +39,8 @@ from pwem.objects import Transform
 from pwem.emlib.image import ImageHandler
 
 from tomo.protocols import ProtTomoBase
-from tomo.objects import (Tomogram, TomoAcquisition, TiltSeries,
-                          TiltImage, SetOfTomograms, SetOfTiltSeries)
+from tomo.objects import (Tomogram, TiltSeries, TiltImage,
+                          SetOfTomograms, SetOfTiltSeries)
 
 from .. import Plugin
 from ..convert import getTransformationMatrix, readAlnFile
@@ -363,7 +363,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         if self.makeTomo:
             outputSetOfTomograms = self.getOutputSetOfTomograms()
-
             newTomogram = Tomogram()
             newTomogram.setLocation(self.getFilePath(tsObjId, extraPrefix, ".mrc"))
 
@@ -374,19 +373,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                              ts.getFirstItem().getYDim() / -2. * sr,
                              self.tomoThickness.get() / self.binFactor.get() / -2 * sr)
             newTomogram.setOrigin(origin)
-
-            # Set tomogram acquisition
-            acquisition = TomoAcquisition()
-            acquisition.setAngleMin(ts.getFirstItem().getTiltAngle())
-            acquisition.setAngleMax(ts[ts.getSize()].getTiltAngle())
-            acquisition.setStep(self.getAngleStepFromSeries(ts))
-            acquisition.setAccumDose(ts.getAcquisition().getAccumDose())
-            newTomogram.setAcquisition(acquisition)
+            newTomogram.setAcquisition(ts.getAcquisition())
             newTomogram.setTsId(tsId)
 
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
-            outputSetOfTomograms.updateDim()
             outputSetOfTomograms.write()
             self._store(outputSetOfTomograms)
         else:
@@ -405,6 +396,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                         newTi.copyInfo(tiltImage, copyTM=False)
 
                         acq = tiltImage.getAcquisition()
+                        acq.setTiltAxisAngle(0.)
                         newTi.setAcquisition(acq)
 
                         newTi.setTiltAngle(tilt_angs[sec_nums.index(secNum)])
@@ -416,6 +408,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
                 acq = newTs.getAcquisition()
                 acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
+                acq.setTiltAxisAngle(0.)  # 0 because TS is aligned
                 newTs.setAcquisition(acq)
 
                 dims = self._getOutputDim(newTi.getFileName())
@@ -423,7 +416,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTs.write(properties=False)
 
                 outTsAligned.update(newTs)
-                outTsAligned.updateDim()
                 outTsAligned.write()
                 self._store(outTsAligned)
             else:
@@ -475,7 +467,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             newTs.write(properties=False)
 
             outputSetOfTiltSeries.update(newTs)
-            outputSetOfTiltSeries.updateDim()
             outputSetOfTiltSeries.write()
             self._store(outputSetOfTiltSeries)
 
@@ -576,16 +567,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTiltSeries)
         return getattr(self, outputName)
-
-    def getAngleStepFromSeries(self, ts):
-        """ This method return the average angle step from a series. """
-        angleStepAverage = 0
-        for i in range(1, ts.getSize()):
-            angleStepAverage += abs(ts[i].getTiltAngle() - ts[i+1].getTiltAngle())
-
-        angleStepAverage /= ts.getSize() - 1
-
-        return angleStepAverage
 
     def _getSetOfTiltSeries(self):
         return self.inputSetOfTiltSeries.get()
