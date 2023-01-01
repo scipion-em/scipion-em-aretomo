@@ -54,8 +54,6 @@ OUT_TOMO = "outputSetOfTomograms"
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     """ Protocol for fiducial-free alignment and reconstruction for tomography.
-
-    Find more information at https://msg.ucsf.edu/software
     """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
