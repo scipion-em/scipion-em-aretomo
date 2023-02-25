@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.6'
+__version__ = '3.6.1'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -40,9 +40,9 @@ _references = ['Zheng2022']
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
-    _supportedVersions = [V1_0_6, V1_0_8, V1_0_10, V1_0_12,
-                          V1_1_0, V1_1_1, V1_2_0, V1_2_5, V1_3_0, V1_3_3]
-    _url = "https://msg.ucsf.edu/software"
+    _supportedVersions = [V1_1_0, V1_1_1, V1_2_0, V1_2_5,
+                          V1_3_0, V1_3_3, V1_3_4]
+    _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
