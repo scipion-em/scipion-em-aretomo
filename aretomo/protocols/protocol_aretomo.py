@@ -54,8 +54,6 @@ OUT_TOMO = "outputSetOfTomograms"
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     """ Protocol for fiducial-free alignment and reconstruction for tomography.
-
-    Find more information at https://msg.ucsf.edu/software
     """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
@@ -132,34 +130,33 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       help='Z height of the reconstructed volume in '
                            '*unbinned* voxels.')
 
-        if Plugin.versionGE(V1_0_12):
-            form.addParam('refineTiltAngles',
-                          params.EnumParam, condition="not useInputProt",
-                          choices=['No', 'Measure only', 'Measure and correct'],
-                          display=params.EnumParam.DISPLAY_COMBO,
-                          label="Refine tilt angles?", default=1,
-                          help="You have three options:\na) Disable measure and correction\n"
-                               "b) Measure only (default). Correction is done during alignment but not "
-                               "for final reconstruction\nc) Measure and correct\n\n"
-                               "Occasionally, the measurement is erroneous and can impair the "
-                               "alignment accuracy. Please note that the orientation of the missing "
-                               "wedge will be changed as a result of the correction of tilt offset. "
-                               "For subtomogram averaging, tomograms reconstructed from tilt "
-                               "series collected within the same tilt range may have different "
-                               "orientations of missing wedges.")
+        form.addParam('refineTiltAngles',
+                      params.EnumParam, condition="not useInputProt",
+                      choices=['No', 'Measure only', 'Measure and correct'],
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      label="Refine tilt angles?", default=1,
+                      help="You have three options:\na) Disable measure and correction\n"
+                           "b) Measure only (default). Correction is done during alignment but not "
+                           "for final reconstruction\nc) Measure and correct\n\n"
+                           "Occasionally, the measurement is erroneous and can impair the "
+                           "alignment accuracy. Please note that the orientation of the missing "
+                           "wedge will be changed as a result of the correction of tilt offset. "
+                           "For subtomogram averaging, tomograms reconstructed from tilt "
+                           "series collected within the same tilt range may have different "
+                           "orientations of missing wedges.")
 
-            form.addParam('refineTiltAxis', params.EnumParam,
-                          condition="not useInputProt",
-                          choices=['No',
-                                   'Refine and use the refined value for the entire tilt series',
-                                   'Refine and calculate tilt axis at each tilt angle'],
-                          display=params.EnumParam.DISPLAY_COMBO,
-                          label="Refine tilt axis angle?", default=1,
-                          help="Tilt axis determination is a two-step processing in AreTomo. "
-                               "A single tilt axis is first calculated followed by the determination "
-                               "of how tilt axis varies over the entire tilt range. The initial "
-                               "value lets users enter their estimate and AreTomo refines the "
-                               "estimate in [-3°, 3°] range.")
+        form.addParam('refineTiltAxis', params.EnumParam,
+                      condition="not useInputProt",
+                      choices=['No',
+                               'Refine and use the refined value for the entire tilt series',
+                               'Refine and calculate tilt axis at each tilt angle'],
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      label="Refine tilt axis angle?", default=1,
+                      help="Tilt axis determination is a two-step processing in AreTomo. "
+                           "A single tilt axis is first calculated followed by the determination "
+                           "of how tilt axis varies over the entire tilt range. The initial "
+                           "value lets users enter their estimate and AreTomo refines the "
+                           "estimate in [-3°, 3°] range.")
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -318,12 +315,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
             tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
 
-            if Plugin.versionGE(V1_0_12):
-                args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
-                                               self.refineTiltAxis.get() - 1)
-                args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
-            else:
-                args['-TiltAxis'] = tiltAxisAngle
+            args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
+                                           self.refineTiltAxis.get() - 1)
+            args['-TiltCor'] = "%s" % (self.refineTiltAngles.get() - 1)
 
             if not self.skipAlign:
                 args['-AlignZ'] = self.alignZ
@@ -438,9 +432,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
                 if secNum not in sec_nums:
                     newTi.setEnabled(False)
-                    frameMatrix = np.zeros((3, 3))
-                    frameMatrix[2, 2] = 1.0
-                    transform.setMatrix(frameMatrix)
+                    transform.setMatrix(np.identity(3))
                 else:
                     # set tilt angles
                     acq = tiltImage.getAcquisition()

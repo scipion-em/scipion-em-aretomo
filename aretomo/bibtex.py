@@ -27,8 +27,7 @@
 """
 
 @article{Zheng2022,
-  doi = {10.1016/j.yjsbx.2022.100068},
-  url = {https://doi.org/10.1016/j.yjsbx.2022.100068},
+  doi = {http://dx.doi.org/10.1016/j.yjsbx.2022.100068},
   year = {2022},
   publisher = {Elsevier {BV}},
   volume = {6},
