@@ -46,12 +46,12 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_3_3)
+        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_3_4)
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB)
-        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.3.3_Cuda%s%s_11212022' % (
+        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.3.4_Cuda%s%s_Feb22_2023' % (
             cudaVersion.major, cudaVersion.minor))
 
     @classmethod
@@ -89,4 +89,4 @@ class Plugin(pwem.Plugin):
         for v in cls._supportedVersions:
             env.addPackage('aretomo', version=v,
                            tar='aretomo_v%s.tgz' % v,
-                           default=v == V1_3_3)
+                           default=v == V1_3_4)
