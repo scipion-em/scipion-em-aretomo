@@ -406,6 +406,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTs.setAcquisition(acq)
 
                 dims = self._getOutputDim(newTi.getFileName())
+                newTs.setInterpolated(True)
                 newTs.setDim(dims)
                 newTs.write(properties=False)
 
