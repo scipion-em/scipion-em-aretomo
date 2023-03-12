@@ -267,7 +267,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
         # Apply the transformation for the input tilt-series
         outputTsFileName = self.getFilePath(tsObjId, tmpPrefix, ".mrc")
-        ts.applyTransform(outputTsFileName)
+        rotationAngle = ts.getAcquisition().getTiltAxisAngle()
+        doSwap = 45 < abs(rotationAngle) < 135
+        ts.applyTransform(outputTsFileName, swapXY=doSwap)
 
         # Generate angle file
         angleFilePath = self.getFilePath(tsObjId, tmpPrefix, ".tlt")
@@ -314,6 +316,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             args['-Align'] = 0 if self.skipAlign else 1
 
             tiltAxisAngle = ts.getAcquisition().getTiltAxisAngle() or 0.0
+            if ts.getFirstItem().hasTransform():
+                # in this case we already used ts.applyTransform()
+                tiltAxisAngle = 0.0
 
             args['-TiltAxis'] = "%s %s" % (tiltAxisAngle,
                                            self.refineTiltAxis.get() - 1)
@@ -406,6 +411,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                 newTs.setAcquisition(acq)
 
                 dims = self._getOutputDim(newTi.getFileName())
+                newTs.setInterpolated(True)
                 newTs.setDim(dims)
                 newTs.write(properties=False)
 
