@@ -29,10 +29,6 @@ ARETOMO_HOME = 'ARETOMO_HOME'
 ARETOMO_CUDA_LIB = 'ARETOMO_CUDA_LIB'
 
 # Supported versions
-V1_0_6 = '1.0.6'
-V1_0_8 = '1.0.8'
-V1_0_10 = '1.0.10'
-V1_0_12 = '1.0.12'
 V1_1_0 = '1.1.0'
 V1_1_1 = '1.1.1'
 V1_2_0 = '1.2.0'
