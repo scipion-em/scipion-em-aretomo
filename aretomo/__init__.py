@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.6.2'
+__version__ = '3.6.3'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -46,13 +46,13 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_3_4)
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo-{V1_3_4}')
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB)
-        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.3.4_Cuda%s%s_Feb22_2023' % (
-            cudaVersion.major, cudaVersion.minor))
+        cls._defineVar(ARETOMO_BIN,
+                       f'AreTomo_1.3.4_Cuda{cudaVersion.major}{cudaVersion.minor}_Feb22_2023')
 
     @classmethod
     def getEnviron(cls):
@@ -88,5 +88,5 @@ class Plugin(pwem.Plugin):
     def defineBinaries(cls, env):
         for v in cls._supportedVersions:
             env.addPackage('aretomo', version=v,
-                           tar='aretomo_v%s.tgz' % v,
+                           tar=f"aretomo_v{v}.tgz",
                            default=v == V1_3_4)

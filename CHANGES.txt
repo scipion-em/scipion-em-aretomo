@@ -1,3 +1,4 @@
+3.6.3: reduce number of Set[item] calls
 3.6.2:
  - fix applyTransform in the convert step
  - add interpolated flag
