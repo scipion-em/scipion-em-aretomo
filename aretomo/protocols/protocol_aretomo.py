@@ -2,6 +2,7 @@
 # *
 # * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
 # *              Federico P. de Isidro Gomez (fp.deisidro@cnb.csic.es) [2]
+# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es
 # *
 # * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
 # * [2] Centro Nacional de Biotecnologia, CSIC, Spain
@@ -34,6 +35,7 @@ from typing import List, Literal, Tuple, Union, Optional
 import pyworkflow.protocol.params as params
 from pyworkflow.constants import BETA
 from pyworkflow.object import Set
+from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform
