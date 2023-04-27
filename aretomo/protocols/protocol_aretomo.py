@@ -55,13 +55,17 @@ OUT_TS_ALN = "outputInterpolatedSetOfTiltSeries"
 OUT_TOMO = "outputSetOfTomograms"
 
 
-class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
+class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     """ Protocol for fiducial-free alignment and reconstruction for tomography. """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
                         OUT_TS_ALN: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms}
+
+    def __init__(self, **args):
+        EMProtocol.__init__(self, **args)
+        self.TS_read = []
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -250,16 +254,46 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
-    # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
-        for ts in self.inputSetOfTiltSeries.get():
-            args = (ts.getObjId(), ts.getTsId(),
-                    ts.getFirstItem().getFileName())
-            self._insertFunctionStep(self.convertInputStep, *args)
-            self._insertFunctionStep(self.runAreTomoStep, *args)
-            self._insertFunctionStep(self.createOutputStep, *args)
-        self._insertFunctionStep(self.closeOutputSetsStep)
+        form.addSection('Streaming')
 
+        form.addParam('dataStreaming', params.BooleanParam, default=True,
+                      label="Process data in streaming?",
+                      help="Select this option if you want tu run the protocol"
+                           "in streaming; reading for new Tilt series and"
+                           "generating outputs in streaming.")
+
+
+
+    # --------------------------- INSERT steps functions ----------------------
+    def _insertAllSteps(self, args):
+        # for ts in self.inputSetOfTiltSeries.get():
+        #     args = (ts.getObjId(), ts.getTsId(),
+        #             ts.getFirstItem().getFileName())
+        self._insertFunctionStep(self.convertInputStep, *args)
+        self._insertFunctionStep(self.runAreTomoStep, *args)
+        self._insertFunctionStep(self.createOutputStep, *args)
+        #self._insertFunctionStep(self.closeOutputSetsStep)
+
+
+    def stepsGeneratorStep(self):
+        """
+        This step should be implemented by any streaming protocol.
+        It should check its input and when ready conditions are met
+        call the self._insertFunctionStep method.
+
+        :return: None
+        """
+        while True:
+            for ts in self.inputSetOfTiltSeries.get():
+                if ts not in self.TS_read:
+                    self.TS_read.append(ts.getTsId)
+                    args = (ts.getObjId(), ts.getTsId(),
+                            ts.getFirstItem().getFileName())
+                    self._insertAllSteps(*args)
+
+            if self.inputSetOfTiltSeries.isStreamOpen() == False:
+                self.closeOutputSetsStep()
+                break
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsObjId: int, tsId: str, tsFn: str):
         ts = self._getSetOfTiltSeries()[tsObjId]
