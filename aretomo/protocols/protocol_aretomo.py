@@ -80,6 +80,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                       params.PointerParam,
                       pointerClass='SetOfTiltSeries',
                       important=True,
+                      allowsNull=False,
                       label='Input set of Tilt-Series',
                       help='If you choose to skip alignment, the input '
                            'tilt-series are expected to be already aligned.')
@@ -265,13 +266,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     # --------------------------- INSERT steps functions ----------------------
     def runTS(self, args):
-        # for ts in self.inputSetOfTiltSeries.get():
-        #     args = (ts.getObjId(), ts.getTsId(),
-        #             ts.getFirstItem().getFileName())
         self._insertFunctionStep(self.convertInputStep, *args)
         self._insertFunctionStep(self.runAreTomoStep, *args)
         self._insertFunctionStep(self.createOutputStep, *args)
-        # self._insertFunctionStep(self.closeOutputSetsStep)
 
     def stepsGeneratorStep(self):
         """
@@ -285,12 +282,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             for ts in self.inputSetOfTiltSeries.get():
                 if ts not in self.TS_read:
                     self.TS_read.append(ts.getTsId)
-                    args = (ts.getObjId(), ts.getTsId(),
-                            ts.getFirstItem().getFileName())
-                    self.runTS(args)
+                    try:
+                        args = (ts.getObjId(), ts.getTsId(),
+                                ts.getFirstItem().getFileName())
+                        self.info('Running TS: {}\n'.format(ts.getObjId()))
+                        self.runTS(args)
+                    except Exception as e:
+                        self.error('Error reading TS info: {}'.format(e))
 
-            if self.inputSetOfTiltSeries.isStreamOpen() == False:
+            if self.inputSetOfTiltSeries.get().isStreamOpen() == False:
                 self.closeOutputSetsStep()
+                self.info('inputSetOfTiltSeries closed')
                 break
 
     # --------------------------- STEPS functions -----------------------------
