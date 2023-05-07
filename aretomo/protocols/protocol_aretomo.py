@@ -430,7 +430,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             newTs.setSamplingRate(self._getInputSampling())
             outputSetOfTiltSeries.append(newTs)
 
-            for secNum, tiltImage in enumerate(ts.iterItems(orderBy='_index')):
+            for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
                 newTi = tiltImage.clone()
                 newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
                 transform = Transform()
@@ -588,15 +588,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
     def _generateTltFile(self, ts: TiltSeries,
                          outputFn: os.PathLike) -> None:
         """ Generate .tlt file with tilt angles and accumulated dose. """
+        angleList = []
 
-        tsParams = ts.aggregate(["COUNT"], "_tiltAngle",
-                                ["_tiltAngle", "_acquisition._accumDose"])
+        for ti in ts.iterItems(orderBy="_index"):
+            accDose = ti.getAcquisition().getAccumDose()
+            tAngle = ti.getTiltAngle()
+            angleList.append((tAngle, accDose))
 
         with open(outputFn, 'w') as f:
             if self.doDW:
-                f.writelines(f"{i['_tiltAngle']:0.3f} {i['_acquisition._accumDose']:0.3f}\n" for i in tsParams)
+                f.writelines(f"{i[0]:0.3f} {i[1]:0.3f}\n" for i in angleList)
             else:
-                f.writelines(f"{i['_tiltAngle']:0.3f}\n" for i in tsParams)
+                f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 
     def _saveInterpolated(self) -> bool:
         return self.saveStack
