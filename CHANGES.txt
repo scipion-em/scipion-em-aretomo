@@ -1,5 +1,17 @@
+3.6.5: allow unsorted tilt series
+3.6.4: adding type hints
+3.6.3: reduce number of Set[item] calls
+3.6.2:
+ - fix applyTransform in the convert step
+ - add interpolated flag
+3.6.1:
+ - add aretomo 1.3.4, remove support for versions < 1.1.0
+ - fix alignment matrix for excluded TS views
 3.6:
- - allow unsorted tilt series
+ - set tilt axis angle to 0 for interpolated aligned TS (fixed issue #36)
+ - remove updateDim calls
+ - use Acquisition from TS for new tomo objs
+3.5.1: add aretomo 1.3.3
 3.5:
  - get rid of xf file conversion, use aln directly
  - add aretomo 1.3.0

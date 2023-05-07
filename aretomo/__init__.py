@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.6'
+__version__ = '3.6.5'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -40,19 +40,19 @@ _references = ['Zheng2022']
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
-    _supportedVersions = [V1_0_6, V1_0_8, V1_0_10, V1_0_12,
-                          V1_1_0, V1_1_1, V1_2_0, V1_2_5, V1_3_0]
+    _supportedVersions = [V1_1_0, V1_1_1, V1_2_0, V1_2_5,
+                          V1_3_0, V1_3_3, V1_3_4]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, 'aretomo-%s' % V1_3_0)
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo-{V1_3_4}')
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB)
-        cls._defineVar(ARETOMO_BIN, 'AreTomo_1.3.0_Cuda%s%s_09292022' % (
-            cudaVersion.major, cudaVersion.minor))
+        cls._defineVar(ARETOMO_BIN,
+                       f'AreTomo_1.3.4_Cuda{cudaVersion.major}{cudaVersion.minor}_Feb22_2023')
 
     @classmethod
     def getEnviron(cls):
@@ -65,7 +65,7 @@ class Plugin(pwem.Plugin):
         return environ
 
     @classmethod
-    def versionGE(cls, version):
+    def versionGE(cls, version: str) -> bool:
         """ Return True if current version of AreTomo is newer
          or equal than the input argument.
          Params:
@@ -80,7 +80,7 @@ class Plugin(pwem.Plugin):
         return True
 
     @classmethod
-    def getProgram(cls):
+    def getProgram(cls) -> str:
         """ Return the program binary that will be used. """
         return cls.getHome('bin', cls.getVar(ARETOMO_BIN))
 
@@ -88,5 +88,5 @@ class Plugin(pwem.Plugin):
     def defineBinaries(cls, env):
         for v in cls._supportedVersions:
             env.addPackage('aretomo', version=v,
-                           tar='aretomo_v%s.tgz' % v,
-                           default=v == V1_3_0)
+                           tar=f"aretomo_v{v}.tgz",
+                           default=v == V1_3_4)
