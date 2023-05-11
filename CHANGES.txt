@@ -1,3 +1,5 @@
+3.6.5: allow unsorted tilt series
+3.6.4: adding type hints
 3.6.3: reduce number of Set[item] calls
 3.6.2:
  - fix applyTransform in the convert step

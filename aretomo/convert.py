@@ -24,10 +24,12 @@
 # *
 # **************************************************************************
 
+import os
 import numpy as np
+from typing import Union, List, NamedTuple, Type
 
 
-def getTransformationMatrix(matrix):
+def getTransformationMatrix(matrix: np.ndarray) -> np.ndarray:
     """ This method takes an IMOD-based transformation matrix (*.xf) and
     returns a 3D matrix containing the transformation matrices for each
     tilt-image belonging to the tilt-series. """
@@ -49,7 +51,15 @@ def getTransformationMatrix(matrix):
     return frameMatrix
 
 
-def readAlnFile(alignFn, newVersion=False):
+class AretomoAln(NamedTuple):
+    sections: List[int]
+    imod_matrix: np.ndarray
+    tilt_angles: List[float]
+    tilt_axes: List[float]
+
+
+def readAlnFile(alignFn: Union[str, os.PathLike],
+                newVersion: bool = False) -> Type[AretomoAln]:
     """ Read AreTomo output alignment file (.aln):
     aln2xf conversion taken from https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py
     """
@@ -62,9 +72,9 @@ def readAlnFile(alignFn, newVersion=False):
             numSec = f.readline().strip("#").split()[0]
 
     data = np.loadtxt(alignFn, dtype=float, comments='#', max_rows=int(numSec))
-    sec_nums = list(data[:, 0].astype(int))  # SEC
-    tilt_angs = data[:, -1]  # TILT
-    tilt_axes = data[:, 1]  # ROT
+    AretomoAln.sections = list(data[:, 0].astype(int))  # SEC
+    AretomoAln.tilt_angles = data[:, -1]  # TILT
+    AretomoAln.tilt_axes = data[:, 1]  # ROT
     angles = -np.radians(data[:, 1])  # ROT
     shifts = data[:, [3, 4]]  # TX, TY
 
@@ -76,6 +86,6 @@ def readAlnFile(alignFn, newVersion=False):
     rot[:, 1, 1] = c
 
     shifts_rot = np.einsum('ijk,ik->ij', rot, shifts)
-    imod_matrix = np.concatenate([rot.reshape(-1, 4), -shifts_rot], axis=1)
+    AretomoAln.imod_matrix = np.concatenate([rot.reshape(-1, 4), -shifts_rot], axis=1)
 
-    return sec_nums, imod_matrix, tilt_angs, tilt_axes
+    return AretomoAln

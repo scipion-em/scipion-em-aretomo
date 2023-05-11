@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.6.3'
+__version__ = '3.6.5'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -65,7 +65,7 @@ class Plugin(pwem.Plugin):
         return environ
 
     @classmethod
-    def versionGE(cls, version):
+    def versionGE(cls, version: str) -> bool:
         """ Return True if current version of AreTomo is newer
          or equal than the input argument.
          Params:
@@ -80,7 +80,7 @@ class Plugin(pwem.Plugin):
         return True
 
     @classmethod
-    def getProgram(cls):
+    def getProgram(cls) -> str:
         """ Return the program binary that will be used. """
         return cls.getHome('bin', cls.getVar(ARETOMO_BIN))
 
