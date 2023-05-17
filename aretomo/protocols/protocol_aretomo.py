@@ -31,8 +31,7 @@ import os
 from glob import glob
 import numpy as np
 from typing import List, Literal, Tuple, Union, Optional
-
-import pyworkflow.protocol.params as params
+from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 from pyworkflow.object import Set
 from pyworkflow.protocol import ProtStreamingBase
@@ -40,7 +39,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform
 from pwem.emlib.image import ImageHandler
-
+import time
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries)
@@ -64,11 +63,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL  # Defining that the protocol contain parallel steps
         self.TS_read = []
 
-    # --------------------------- DEFINE param functions ----------------------
+        # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         # Keep this for compatibility with older plugin versions
+        form.addParallelSection(threads=3)
+
         form.addHidden('tiltAxisAngle', params.FloatParam,
                        default=0., label='Tilt axis angle',
                        help='Note that the orientation of tilt axis is '
@@ -265,11 +267,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "generating outputs in streaming.")
 
     # --------------------------- INSERT steps functions ----------------------
-    def runTS(self, args):
-        self._insertFunctionStep(self.convertInputStep, *args)
-        self._insertFunctionStep(self.runAreTomoStep, *args)
-        self._insertFunctionStep(self.createOutputStep, *args)
-
     def stepsGeneratorStep(self):
         """
         This step should be implemented by any streaming protocol.
@@ -279,24 +276,38 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         :return: None
         """
         while True:
-            for ts in self.inputSetOfTiltSeries.get():
-                if ts not in self.TS_read:
-                    self.TS_read.append(ts.getTsId)
+            SOTS = self.inputSetOfTiltSeries.get()
+            self.info('Input set of tilt series: {}'.format(SOTS))
+            for ts in SOTS:
+                if ts.getObjId() not in self.TS_read:
+                    self.info('TS_ID reading: {}\nTS_ID readed: {}'.format(
+                        ts.getObjId(), self.TS_read))
+                    self.TS_read.append(ts.getObjId())
                     try:
                         args = (ts.getObjId(), ts.getTsId(),
                                 ts.getFirstItem().getFileName())
-                        self.info('Running TS: {}\n'.format(ts.getObjId()))
-                        self.runTS(args)
+                        convertInput = self._insertFunctionStep(
+                            self.convertInputStep, *args)
+                        runAreTomo = self._insertFunctionStep(
+                            self.runAreTomoStep, *args,
+                            prerequisites=[convertInput])
+                        createOutputStep = self._insertFunctionStep(self.createOutputStep, *args,
+                                                 prerequisites=[runAreTomo])
+                        self._insertFunctionStep(self.closeOutputSetsStep,
+                                                 prerequisites=[createOutputStep])
                     except Exception as e:
                         self.error('Error reading TS info: {}'.format(e))
+                        self.error('ts.getFirstItem(): {}'.format(ts.getFirstItem()))
+                time.sleep(10)
 
             if self.inputSetOfTiltSeries.get().isStreamOpen() == False:
-                self.closeOutputSetsStep()
                 self.info('inputSetOfTiltSeries closed')
                 break
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsObjId: int, tsId: str, tsFn: str):
+        self.info('------- convertInputStep ts_id: {}'.format(tsObjId))
+
         ts = self._getSetOfTiltSeries()[tsObjId]
 
         extraPrefix = self._getExtraPath(tsId)
@@ -329,6 +340,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def runAreTomoStep(self, tsObjId: int, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
+        self.info('------- runAreTomoStep ts_id: {}'.format(tsObjId))
+
         tsSet = self._getSetOfTiltSeries()
         ts = tsSet[tsObjId]
 
@@ -389,6 +402,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         self.runJob(program, param, env=Plugin.getEnviron())
 
     def createOutputStep(self, tsObjId: int, tsId: str, tsFn: str):
+        self.info('------- createOutputStep ts_id: {}'.format(tsObjId))
+
         ts = self._getSetOfTiltSeries()[tsObjId]
         extraPrefix = self._getExtraPath(tsId)
 
@@ -547,7 +562,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def _validate(self) -> List[str]:
         errors = []
-
+        self._validateThreads(errors)
         if self.useInputProt:
             if not self.inputProt.hasValue():
                 errors.append("Provide input AreTomo protocol for alignment.")
@@ -564,13 +579,22 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             errors.append("You cannot switch off both alignment and "
                           "reconstruction.")
 
-        if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
-            errors.append("Input tilt-series already have alignment "
+
+        if  self._getSetOfTiltSeries():
+            if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
+                errors.append("Input tilt-series already have alignment "
                           "information. You probably want to skip alignment step.")
 
         return errors
 
     # --------------------------- UTILS functions -----------------------------
+    def readingOutput(self):
+        self.TS_read = []
+        # outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
+        # for ts in outputSetOfTiltSeries:
+        #     self.TS_read.append(ts.getObjId)
+        #     self.info('tsReaded: {}'.format(ts.getObjId))
+
     def getFilePath(self,
                     tsFn: Union[str, os.PathLike],
                     prefix: str,
