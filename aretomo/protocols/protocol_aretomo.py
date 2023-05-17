@@ -65,6 +65,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         EMProtocol.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL  # Defining that the protocol contain parallel steps
         self.TS_read = []
+        self.outputSOTSList_objID = []
 
         # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -275,13 +276,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         :return: None
         """
+        self.readingOutput()
         while True:
-            SOTS = self.inputSetOfTiltSeries.get()
-            self.info('Input set of tilt series: {}'.format(SOTS))
-            for ts in SOTS:
+            listTSInput = [ts.getObjId() for ts in self.inputSetOfTiltSeries.get()]
+
+            if self.inputSetOfTiltSeries.get().isStreamOpen() == False and \
+                    self.outputSOTSList_objID == listTSInput:
+                    self.info('Input set closed and tomogram calculated for each one\n')
+                    break
+            for ts in self.inputSetOfTiltSeries.get():
                 if ts.getObjId() not in self.TS_read:
-                    self.info('TS_ID reading: {}\nTS_ID readed: {}'.format(
-                        ts.getObjId(), self.TS_read))
+                    self.info('TS_ID input: {}\nTS_ID reading... {}\nTS_ID read: {}'.format(
+                        listTSInput, ts.getObjId(), self.TS_read))
                     self.TS_read.append(ts.getObjId())
                     try:
                         args = (ts.getObjId(), ts.getTsId(),
@@ -300,9 +306,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self.error('ts.getFirstItem(): {}'.format(ts.getFirstItem()))
                 time.sleep(10)
 
-            if self.inputSetOfTiltSeries.get().isStreamOpen() == False:
-                self.info('inputSetOfTiltSeries closed')
-                break
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsObjId: int, tsId: str, tsFn: str):
@@ -589,11 +592,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     # --------------------------- UTILS functions -----------------------------
     def readingOutput(self):
-        self.TS_read = []
-        # outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
-        # for ts in outputSetOfTiltSeries:
-        #     self.TS_read.append(ts.getObjId)
-        #     self.info('tsReaded: {}'.format(ts.getObjId))
+        try:
+            if self.outputSetOfTiltSeries:
+                for ts in self.outputSetOfTiltSeries:
+                    self.TS_read.append(ts.getObjId())
+            self.info('Tomograms calculated for this TS_ID : {}'.format(self.TS_read))
+            self.outputSOTSList_objID = self.TS_read
+
+        except AttributeError: #There is no outputSetOfTiltSeries
+            pass
 
     def getFilePath(self,
                     tsFn: Union[str, os.PathLike],
