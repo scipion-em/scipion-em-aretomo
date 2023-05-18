@@ -2,7 +2,7 @@
 # *
 # * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
 # *              Federico P. de Isidro Gomez (fp.deisidro@cnb.csic.es) [2]
-# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es
+# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es [2]
 # *
 # * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
 # * [2] Centro Nacional de Biotecnologia, CSIC, Spain
@@ -54,7 +54,7 @@ OUT_TOMO = "outputSetOfTomograms"
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
-    """ Protocol for fiducial-free alignment and reconstruction for tomography. """
+    """ Protocol for fiducial-free alignment and reconstruction for tomography abailable in streaming. """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
@@ -259,13 +259,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
-        form.addSection('Streaming')
-
-        form.addParam('dataStreaming', params.BooleanParam, default=True,
-                      label="Process data in streaming?",
-                      help="Select this option if you want tu run the protocol"
-                           "in streaming; reading for new Tilt series and"
-                           "generating outputs in streaming.")
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self):
@@ -286,21 +279,21 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     break
             for ts in self.inputSetOfTiltSeries.get():
                 if ts.getObjId() not in self.TS_read:
-                    self.info('TS_ID input: {}\nTS_ID reading... {}\nTS_ID read: {}'.format(
+                    self.info('TS_ID input: {}\nTS_ID reading... {}\nTS_ID read: {}\n'.format(
                         listTSInput, ts.getObjId(), self.TS_read))
                     self.TS_read.append(ts.getObjId())
                     try:
                         args = (ts.getObjId(), ts.getTsId(),
                                 ts.getFirstItem().getFileName())
                         convertInput = self._insertFunctionStep(
-                            self.convertInputStep, *args)
+                            self.convertInputStep, *args, prerequisites=[])
                         runAreTomo = self._insertFunctionStep(
                             self.runAreTomoStep, *args,
                             prerequisites=[convertInput])
-                        createOutputStep = self._insertFunctionStep(self.createOutputStep, *args,
+                        createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
                                                  prerequisites=[runAreTomo])
                         self._insertFunctionStep(self.closeOutputSetsStep,
-                                                 prerequisites=[createOutputStep])
+                                                 prerequisites=[createOutputS])
                     except Exception as e:
                         self.error('Error reading TS info: {}'.format(e))
                         self.error('ts.getFirstItem(): {}'.format(ts.getFirstItem()))
