@@ -276,7 +276,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             listTSInput = [ts.getObjId() for ts in self.inputSetOfTiltSeries.get()]
 
             if self.inputSetOfTiltSeries.get().isStreamOpen() == False and \
-                    self.outputSOTSList_objID == listTSInput:
+                    self.TS_read == listTSInput:
                     self.info('Input set closed and tomogram calculated for each one\n')
                     break
             for ts in self.inputSetOfTiltSeries.get():
