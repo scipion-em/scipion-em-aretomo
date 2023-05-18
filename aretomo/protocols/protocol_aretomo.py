@@ -43,6 +43,7 @@ import time
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from .. import Plugin
 from ..convert import getTransformationMatrix, readAlnFile
@@ -60,6 +61,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
                         OUT_TS_ALN: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms}
+
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
