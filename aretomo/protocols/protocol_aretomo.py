@@ -168,7 +168,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "A single tilt axis is first calculated followed by the determination "
                            "of how tilt axis varies over the entire tilt range. The initial "
                            "value lets users enter their estimate and AreTomo refines the "
-                           "estimate in [-3�, 3�] range.")
+                           "estimate in [-3º, 3º] range.")
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -204,7 +204,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                       condition="not useInputProt",
                       label="ROI for focused alignment",
                       help="By default AreTomo assumes the region of interest "
-                           "at the center of 0� projection image. A circular "
+                           "at the center of 0º projection image. A circular "
                            "mask is employed to down-weight the area outside "
                            "ROI during the alignment. When the structures of "
                            "interest are far away from the tilt axis, the "
@@ -214,7 +214,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "accuracy for the distant structures.\nHere you can "
                            "provide *a pair of x and y coordinates*, representing "
                            "the center of the region of interest.\n"
-                           "The region of interest should be selected from 0� "
+                           "The region of interest should be selected from 0º "
                            "projection image with the origin at the lower left "
                            "corner. IMOD's Pixel View is a good tool to select "
                            "the center of region of interest.")
@@ -237,7 +237,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                             "into a two-column text file, one column for x "
                             "and the other for y. Each pair defines a region "
                             "of interest (ROI). The origin of the coordinate "
-                            "system is at the image?s lower left corner.")
+                            "system is at the image's lower left corner.")
 
         line = group.addLine("Patches",
                              condition='not useInputProt and sampleType==%d' % LOCAL_MOTION_PATCHES)
