@@ -268,10 +268,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         """
         self.readingOutput()
         while True:
-            listTSInput = [self._getSetOfTiltSeries().getIdSet()]
-
-            if not (self._getSetOfTiltSeries().isStreamOpen() and
-                    self.TS_read == listTSInput):
+            listTSInput = list(self._getSetOfTiltSeries().getIdSet())
+            self.info('info: {} {}'.format(self.TS_read, listTSInput))
+            if not self._getSetOfTiltSeries().isStreamOpen() and self.TS_read == listTSInput:
                 self.info('Input set closed, all items processed\n')
                 break
             for ts in self._getSetOfTiltSeries():
