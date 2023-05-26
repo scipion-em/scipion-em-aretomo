@@ -2,6 +2,7 @@
 # *
 # * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
 # *              Federico P. de Isidro Gomez (fp.deisidro@cnb.csic.es) [2]
+# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es [2]
 # *
 # * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
 # * [2] Centro Nacional de Biotecnologia, CSIC, Spain
@@ -29,16 +30,17 @@
 import os
 from glob import glob
 import numpy as np
+import time
 from typing import List, Literal, Tuple, Union, Optional
 
-import pyworkflow.protocol.params as params
+from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import BETA
 from pyworkflow.object import Set
+from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform
 from pwem.emlib.image import ImageHandler
-
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries)
@@ -47,21 +49,26 @@ from .. import Plugin
 from ..convert import getTransformationMatrix, readAlnFile
 from ..constants import *
 
-
 OUT_TS = "outputSetOfTiltSeries"
 OUT_TS_ALN = "outputInterpolatedSetOfTiltSeries"
 OUT_TOMO = "outputSetOfTomograms"
 
 
-class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
-    """ Protocol for fiducial-free alignment and reconstruction for tomography. """
+class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
+    """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
     _label = 'tilt-series align and reconstruct'
     _devStatus = BETA
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
                         OUT_TS_ALN: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms}
 
-    # --------------------------- DEFINE param functions ----------------------
+    def __init__(self, **args):
+        EMProtocol.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
+        self.TS_read = []
+        self.outputSOTSList_objID = []
+
+        # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         # Keep this for compatibility with older plugin versions
         form.addHidden('tiltAxisAngle', params.FloatParam,
@@ -114,7 +121,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       help='Binning for aligned output tilt-series / volume.')
 
         form.addParam('alignZ', params.IntParam, default=800,
-                      condition='not skipAlign and not useInputProt', important=True,
+                      condition='not skipAlign and not useInputProt',
+                      important=True,
                       label='Volume height for alignment (voxels)',
                       help='Specifies Z height (*unbinned*) of the temporary volume '
                            'reconstructed for projection matching as part '
@@ -156,7 +164,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "A single tilt axis is first calculated followed by the determination "
                            "of how tilt axis varies over the entire tilt range. The initial "
                            "value lets users enter their estimate and AreTomo refines the "
-                           "estimate in [-3°, 3°] range.")
+                           "estimate in [-3º, 3º] range.")
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -192,7 +200,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                       condition="not useInputProt",
                       label="ROI for focused alignment",
                       help="By default AreTomo assumes the region of interest "
-                           "at the center of 0° projection image. A circular "
+                           "at the center of 0º projection image. A circular "
                            "mask is employed to down-weight the area outside "
                            "ROI during the alignment. When the structures of "
                            "interest are far away from the tilt axis, the "
@@ -202,7 +210,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                            "accuracy for the distant structures.\nHere you can "
                            "provide *a pair of x and y coordinates*, representing "
                            "the center of the region of interest.\n"
-                           "The region of interest should be selected from 0° "
+                           "The region of interest should be selected from 0º "
                            "projection image with the origin at the lower left "
                            "corner. IMOD's Pixel View is a good tool to select "
                            "the center of region of interest.")
@@ -210,7 +218,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         group = form.addGroup('Local motion correction')
         group.addParam('sampleType', params.EnumParam,
                        condition="not useInputProt",
-                       choices=['Disable local correction', 'Isolated', 'Well distributed'],
+                       choices=['Disable local correction', 'Isolated',
+                                'Well distributed'],
                        display=params.EnumParam.DISPLAY_COMBO,
                        label="Sample type", default=0,
                        help="AreTomo provides two means to correct the local "
@@ -224,7 +233,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
                             "into a two-column text file, one column for x "
                             "and the other for y. Each pair defines a region "
                             "of interest (ROI). The origin of the coordinate "
-                            "system is at the image’s lower left corner.")
+                            "system is at the image's lower left corner.")
 
         line = group.addLine("Patches",
                              condition='not useInputProt and sampleType==%d' % LOCAL_MOTION_PATCHES)
@@ -248,18 +257,48 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
+        form.addParallelSection(threads=3, mpi=1)
+
     # --------------------------- INSERT steps functions ----------------------
-    def _insertAllSteps(self):
-        for ts in self.inputSetOfTiltSeries.get():
-            args = (ts.getObjId(), ts.getTsId(),
-                    ts.getFirstItem().getFileName())
-            self._insertFunctionStep(self.convertInputStep, *args)
-            self._insertFunctionStep(self.runAreTomoStep, *args)
-            self._insertFunctionStep(self.createOutputStep, *args)
-        self._insertFunctionStep(self.closeOutputSetsStep)
+    def stepsGeneratorStep(self) -> None:
+        """
+        This step should be implemented by any streaming protocol.
+        It should check its input and when ready conditions are met
+        call the self._insertFunctionStep method.
+        """
+        self.readingOutput()
+        while True:
+            listTSInput = list(self._getSetOfTiltSeries().getIdSet())
+            if not self._getSetOfTiltSeries().isStreamOpen() and self.TS_read == listTSInput:
+                self.info('Input set closed, all items processed\n')
+                break
+            for ts in self._getSetOfTiltSeries():
+                if ts.getObjId() not in self.TS_read:
+                    self.info(f"TS_ID input: {listTSInput}\n"
+                              f"TS_ID reading... {ts.getObjId()}\n"
+                              f"TS_ID read: {self.TS_read}\n")
+                    self.TS_read.append(ts.getObjId())
+                    try:
+                        args = (ts.getObjId(), ts.getTsId(),
+                                ts.getFirstItem().getFileName())
+                        convertInput = self._insertFunctionStep(
+                            self.convertInputStep, *args, prerequisites=[])
+                        runAreTomo = self._insertFunctionStep(
+                            self.runAreTomoStep, *args,
+                            prerequisites=[convertInput])
+                        createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
+                                                                 prerequisites=[runAreTomo])
+                        self._insertFunctionStep(self.closeOutputSetsStep,
+                                                 prerequisites=[createOutputS])
+                    except Exception as e:
+                        self.error(f'Error reading TS info: {e}')
+                        self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
+                time.sleep(10)
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsObjId: int, tsId: str, tsFn: str):
+        self.info(f'------- convertInputStep ts_id: {tsObjId}')
+
         ts = self._getSetOfTiltSeries()[tsObjId]
 
         extraPrefix = self._getExtraPath(tsId)
@@ -280,7 +319,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         if self.useInputProt:
             # Find and copy aln file
             protExtra = self.inputProt.get()._getExtraPath(tsId)
-            protAlnBase = self.getFilePath(tsFn, protExtra, ".aln").replace("_even", "*").replace("_odd", "*")
+            protAlnBase = self.getFilePath(tsFn, protExtra, ".aln").replace(
+                "_even", "*").replace("_odd", "*")
             protAln = glob(protAlnBase)
             if protAln:
                 pwutils.copyFile(protAln[0],
@@ -291,6 +331,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
     def runAreTomoStep(self, tsObjId: int, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
+        self.info(f'------- runAreTomoStep ts_id: {tsObjId}')
+
         tsSet = self._getSetOfTiltSeries()
         ts = tsSet[tsObjId]
 
@@ -350,12 +392,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         self.runJob(program, param, env=Plugin.getEnviron())
 
     def createOutputStep(self, tsObjId: int, tsId: str, tsFn: str):
+        self.info(f'------- createOutputStep ts_id: {tsObjId}')
+
         ts = self._getSetOfTiltSeries()[tsObjId]
         extraPrefix = self._getExtraPath(tsId)
 
         if not (self.makeTomo and self.skipAlign):
-            AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"),
-                                     newVersion=Plugin.versionGE("1.3.0"))
+            AretomoAln = readAlnFile(
+                self.getFilePath(tsFn, extraPrefix, ".aln"),
+                newVersion=Plugin.versionGE("1.3.0"))
             alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
         if self.makeTomo:
@@ -448,8 +493,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
 
                     # set Transform
                     m = alignmentMatrix[:, :, secIndex]
-                    self.debug(f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
-                               f"{AretomoAln.tilt_angles[secIndex]}")
+                    self.debug(
+                        f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
+                        f"{AretomoAln.tilt_angles[secIndex]}")
                     transform.setMatrix(m)
 
                 newTi.setTransform(transform)
@@ -500,9 +546,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
         methods = []
 
         return methods
-    
+
     def _validate(self) -> List[str]:
         errors = []
+        self._validateThreads(errors)
 
         if self.useInputProt:
             if not self.inputProt.hasValue():
@@ -510,7 +557,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             if not Plugin.versionGE(V1_1_1):
                 errors.append("Input alignment can be used only with AreTomo v1.1.1+")
         else:
-            if (not self.skipAlign) and self.makeTomo and (self.alignZ >= self.tomoThickness):
+            if (not self.skipAlign) and self.makeTomo and (
+                    self.alignZ >= self.tomoThickness):
                 errors.append("Z volume height for alignment should be always "
                               "smaller than tomogram thickness.")
 
@@ -518,13 +566,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase):
             errors.append("You cannot switch off both alignment and "
                           "reconstruction.")
 
-        if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
-            errors.append("Input tilt-series already have alignment "
-                          "information. You probably want to skip alignment step.")
+        if self._getSetOfTiltSeries():
+            if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
+                errors.append("Input tilt-series already have alignment "
+                              "information. You probably want to skip alignment step.")
 
         return errors
-    
+
     # --------------------------- UTILS functions -----------------------------
+    def readingOutput(self) -> None:
+        try:
+            if self.outputSetOfTiltSeries:
+                for ts in self.outputSetOfTiltSeries:
+                    self.TS_read.append(ts.getObjId())
+            self.info(f'Tomograms calculated for this TS_ID : {self.TS_read}')
+            self.outputSOTSList_objID = self.TS_read
+
+        except AttributeError:  # There is no outputSetOfTiltSeries
+            pass
+
     def getFilePath(self,
                     tsFn: Union[str, os.PathLike],
                     prefix: str,
