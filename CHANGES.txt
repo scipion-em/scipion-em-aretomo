@@ -1,3 +1,4 @@
+3.7: initial streaming support (@albertmena)
 3.6.5: allow unsorted tilt series
 3.6.4: adding type hints
 3.6.3: reduce number of Set[item] calls
