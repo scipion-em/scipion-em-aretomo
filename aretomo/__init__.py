@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.6.5'
+__version__ = '3.7'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
