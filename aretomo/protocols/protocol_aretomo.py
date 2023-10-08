@@ -34,7 +34,7 @@ import time
 from typing import List, Literal, Tuple, Union, Optional
 
 from pyworkflow.protocol import params, STEPS_PARALLEL
-from pyworkflow.constants import BETA
+from pyworkflow.constants import PROD
 from pyworkflow.object import Set
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
@@ -57,7 +57,7 @@ OUT_TOMO = "outputSetOfTomograms"
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
     _label = 'tilt-series align and reconstruct'
-    _devStatus = BETA
+    _devStatus = PROD
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
                         OUT_TS_ALN: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms}
