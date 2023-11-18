@@ -2,7 +2,7 @@
 # *
 # * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
 # *              Federico P. de Isidro Gomez (fp.deisidro@cnb.csic.es) [2]
-# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es [2]
+# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es) [2]
 # *
 # * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
 # * [2] Centro Nacional de Biotecnologia, CSIC, Spain
@@ -47,7 +47,8 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
 
 from .. import Plugin
 from ..convert import getTransformationMatrix, readAlnFile
-from ..constants import *
+from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
+
 
 OUT_TS = "outputSetOfTiltSeries"
 OUT_TS_ALN = "outputInterpolatedSetOfTiltSeries"
@@ -554,8 +555,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if self.useInputProt:
             if not self.inputProt.hasValue():
                 errors.append("Provide input AreTomo protocol for alignment.")
-            if not Plugin.versionGE(V1_1_1):
-                errors.append("Input alignment can be used only with AreTomo v1.1.1+")
         else:
             if (not self.skipAlign) and self.makeTomo and (
                     self.alignZ >= self.tomoThickness):

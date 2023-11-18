@@ -69,7 +69,7 @@ AreTomo is free for academic use only. For commercial use, please contact David 
 Supported versions
 ------------------
 
-1.1.0, 1.1.1, 1.2.0, 1.2.5, 1.3.0, 1.3.3, 1.3.4
+1.2.0, 1.2.5, 1.3.0, 1.3.3, 1.3.4
 
 Protocols
 ---------
