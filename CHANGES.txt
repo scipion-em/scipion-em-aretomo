@@ -1,6 +1,8 @@
-3.7.2: minor changes
+3.7.2:
+ - minor changes
+ - Fix origin of tomograms when there is binning.
 3.7.1: fix pw requirements
-3.7: initial streaming support (@albertmena)
+3.7  : initial streaming support (@albertmena)
 3.6.5: allow unsorted tilt series
 3.6.4: adding type hints
 3.6.3: reduce number of Set[item] calls
