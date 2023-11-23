@@ -411,10 +411,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
             # Set tomogram origin
             origin = Transform()
-            sr = self._getOutputSampling()
-            origin.setShifts(ts.getFirstItem().getXDim() / -2. * sr,
-                             ts.getFirstItem().getYDim() / -2. * sr,
-                             self.tomoThickness.get() / self.binFactor.get() / -2 * sr)
+            sr = self._getInputSampling()
+            origin.setShifts((ts.getFirstItem().getXDim() / -2.) * sr,
+                             (ts.getFirstItem().getYDim() / -2.) * sr,
+                             (self.tomoThickness.get() * self.binFactor.get() / -2.) * sr)
             newTomogram.setOrigin(origin)
             newTomogram.setAcquisition(ts.getAcquisition())
             newTomogram.setTsId(tsId)
