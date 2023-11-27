@@ -2,7 +2,7 @@
 # *
 # * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
 # *              Federico P. de Isidro Gomez (fp.deisidro@cnb.csic.es) [2]
-# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es [2]
+# *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es) [2]
 # *
 # * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
 # * [2] Centro Nacional de Biotecnologia, CSIC, Spain
@@ -34,7 +34,7 @@ import time
 from typing import List, Literal, Tuple, Union, Optional
 
 from pyworkflow.protocol import params, STEPS_PARALLEL
-from pyworkflow.constants import BETA
+from pyworkflow.constants import PROD
 from pyworkflow.object import Set
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
@@ -47,7 +47,8 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
 
 from .. import Plugin
 from ..convert import getTransformationMatrix, readAlnFile
-from ..constants import *
+from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
+
 
 OUT_TS = "outputSetOfTiltSeries"
 OUT_TS_ALN = "outputInterpolatedSetOfTiltSeries"
@@ -57,7 +58,7 @@ OUT_TOMO = "outputSetOfTomograms"
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
     _label = 'tilt-series align and reconstruct'
-    _devStatus = BETA
+    _devStatus = PROD
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
                         OUT_TS_ALN: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms}
@@ -257,7 +258,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
-        form.addParallelSection(threads=3, mpi=1)
+        form.addParallelSection(threads=3)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -410,10 +411,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
             # Set tomogram origin
             origin = Transform()
-            sr = self._getOutputSampling()
-            origin.setShifts(ts.getFirstItem().getXDim() / -2. * sr,
-                             ts.getFirstItem().getYDim() / -2. * sr,
-                             self.tomoThickness.get() / self.binFactor.get() / -2 * sr)
+            sr = self._getInputSampling()
+            origin.setShifts((ts.getFirstItem().getXDim() / -2.) * sr,
+                             (ts.getFirstItem().getYDim() / -2.) * sr,
+                             (self.tomoThickness.get() * self.binFactor.get() / -2.) * sr)
             newTomogram.setOrigin(origin)
             newTomogram.setAcquisition(ts.getAcquisition())
             newTomogram.setTsId(tsId)
@@ -554,8 +555,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if self.useInputProt:
             if not self.inputProt.hasValue():
                 errors.append("Provide input AreTomo protocol for alignment.")
-            if not Plugin.versionGE(V1_1_1):
-                errors.append("Input alignment can be used only with AreTomo v1.1.1+")
         else:
             if (not self.skipAlign) and self.makeTomo and (
                     self.alignZ >= self.tomoThickness):
