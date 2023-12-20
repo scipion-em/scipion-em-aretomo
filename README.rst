@@ -61,7 +61,7 @@ To check the installation, simply run the following Scipion test:
 Licensing
 ---------
 
-AreTomo3 is available under BSD-3 license
+AreTomo2 is available under BSD-3 license
 
 Supported versions
 ------------------
