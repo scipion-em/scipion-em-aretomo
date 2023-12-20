@@ -2,7 +2,7 @@
 AreTomo plugin
 ==============
 
-This plugin provides a wrapper for `AreTomo <https://msg.ucsf.edu/software>`_ program.
+This plugin provides a wrapper for `AreTomo <https://github.com/czimaginginstitute/AreTomo2>`_ program.
 
 .. image:: https://img.shields.io/pypi/v/scipion-em-aretomo.svg
         :target: https://pypi.python.org/pypi/scipion-em-aretomo
@@ -50,9 +50,9 @@ b) Developer's version
         scipion installp -p /path/to/scipion-em-aretomo --devel
 
 * AreTomo binaries will be installed automatically with the plugin, but you can also link an existing installation.
-* Default installation path assumed is ``software/em/aretomo-1.3.4``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to the folder where the AreTomo is installed.
-* Depending on your CUDA version this plugin will guess the right default binary from AreTomo_1.3.4_CudaXY_Feb22_2023 (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting ARETOMO_BIN variable.
-* If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *ARETOMO_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official UCSF website.
+* Default installation path assumed is ``software/em/aretomo2-1.0.0``, if you want to change it, set *ARETOMO_HOME* in ``scipion.conf`` file to the folder where the AreTomo is installed.
+* Depending on your CUDA version this plugin will guess the right default binary from ``AreTomo2_1.0.0_CudaXY`` (X is for cuda major version, Y for the minor). You can always set a different one by explicitly setting ARETOMO_BIN variable.
+* If you need to use CUDA different from the one used during Scipion installation (defined by CUDA_LIB), you can add *ARETOMO_CUDA_LIB* variable to the config file. Various binaries can be downloaded from the official website.
 
 To check the installation, simply run the following Scipion test:
 
@@ -61,22 +61,20 @@ To check the installation, simply run the following Scipion test:
 Licensing
 ---------
 
-AreTomo is free for academic use only. For commercial use, please contact David Agard or Yifan Cheng for licensing:
-
-    * agard@msg.ucsf.edu
-    * Yifan.Cheng@ucsf.edu
+AreTomo3 is available under BSD-3 license
 
 Supported versions
 ------------------
 
-1.2.0, 1.2.5, 1.3.0, 1.3.3, 1.3.4
+aretomo2: 1.0.0
+aretomo: 1.3.4
 
 Protocols
 ---------
 
     * tilt-series align and reconstruct
 
-Detailed manual can be found in ``software/em/aretomo-1.3.4/bin/AreTomoManual_1.3.0_09292022.pdf``
+Detailed manual can be found in ``software/em/aretomo2-1.0.0/bin/AreTomo2Manual_1.0.0_10-26-2023.pdf``
 
 References
 ----------

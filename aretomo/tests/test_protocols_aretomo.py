@@ -68,7 +68,8 @@ class TestAreTomo(TestAreTomoBase):
         print(magentaStr("\n==> Testing AreTomo (align and reconstruct):"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=protImport.outputTiltSeries,
-                                tomoThickness=200, alignZ=180, tiltAxisAngle=-12.5)
+                                tomoThickness=200, alignZ=180, tiltAxisAngle=-12.5,
+                                darkTol=0.1)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.outputSetOfTomograms,
                              "SetOfTomograms has not been produced.")
@@ -79,7 +80,8 @@ class TestAreTomo(TestAreTomoBase):
         print(magentaStr("\n==> Testing AreTomo (align only):"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=protImport.outputTiltSeries,
-                                makeTomo=False, alignZ=180, tiltAxisAngle=-12.5)
+                                makeTomo=False, alignZ=180, tiltAxisAngle=-12.5,
+                                darkTol=0.1)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.outputSetOfTiltSeries,
                              "SetOfTiltSeries has not been produced.")
