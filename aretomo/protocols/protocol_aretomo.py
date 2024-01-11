@@ -350,7 +350,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
-            '-Cs': tsSet.getAcquisition().getSphericalAberration(),
+            '-Cs': 0,  # tsSet.getAcquisition().getSphericalAberration(),
             '-Defoc': 0,  # disable defocus correction
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
@@ -399,9 +399,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         extraPrefix = self._getExtraPath(tsId)
 
         if not (self.makeTomo and self.skipAlign):
-            AretomoAln = readAlnFile(
-                self.getFilePath(tsFn, extraPrefix, ".aln"),
-                newVersion=Plugin.versionGE("1.3.0"))
+            AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"))
             alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
         if self.makeTomo:
