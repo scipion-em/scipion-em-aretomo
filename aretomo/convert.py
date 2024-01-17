@@ -67,7 +67,7 @@ def readAlnFile(alignFn: Union[str, os.PathLike]) -> Type[AretomoAln]:
         f.readline()
         numSec = f.readline().strip("#").split()[-1]
 
-    data = np.loadtxt(alignFn, dtype=float, comments='#', max_rows=int(numSec))
+    data = np.loadtxt(alignFn, dtype=float, comments='#', skiprows=4, max_rows=int(numSec))
     AretomoAln.sections = list(data[:, 0].astype(int))  # SEC
     AretomoAln.tilt_angles = data[:, -1]  # TILT
     AretomoAln.tilt_axes = data[:, 1]  # ROT
