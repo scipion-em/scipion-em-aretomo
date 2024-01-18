@@ -144,7 +144,7 @@ setup(
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=['scipion-em', 'scipion-em-tomo',
-                      'scipion-pyworkflow>=3.0.30'],  # Optional
+                      'scipion-pyworkflow>=3.0.30', 'numpy>=1.23.0'],  # Optional
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
