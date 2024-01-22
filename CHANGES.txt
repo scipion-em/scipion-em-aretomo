@@ -1,3 +1,7 @@
+3.8:
+    - add aretomo2 1.0.0
+    - fix output aln file parsing during local alignment
+    - add extra output option
 3.7.2:
  - minor changes
  - Fix origin of tomograms when there is binning.
