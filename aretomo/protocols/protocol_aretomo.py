@@ -167,6 +167,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "value lets users enter their estimate and AreTomo refines the "
                            "estimate in [-3º, 3º] range.")
 
+        form.addParam('outImod', params.EnumParam,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      choices=['No', 'Relion 4', 'Warp', 'Save locally aligned TS'],
+                      default=0,
+                      label="Generate extra IMOD output?",
+                      help="0 - No\n1 - generate IMOD files for Relion 4\n"
+                           "2 - generate IMOD files for Warp\n"
+                           "3 - generate global and local-aligned tilt series stack. "
+                           "High frequencies are enhanced to alleviate the attenuation "
+                           "due to interpolation.")
+
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
                       label="Do dose-weighting?")
@@ -343,6 +354,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         args = {
             '-InMrc': self.getFilePath(tsFn, tmpPrefix, ".mrc"),
             '-OutMrc': self.getFilePath(tsFn, extraPrefix, ".mrc"),
+            '-OutImod': self.outImod.get(),
             '-AngFile': self.getFilePath(tsFn, tmpPrefix, ".tlt"),
             '-VolZ': self.tomoThickness if self.makeTomo else 0,
             '-OutBin': self.binFactor,
@@ -350,7 +362,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
-            '-Cs': 0,  # tsSet.getAcquisition().getSphericalAberration(),
+            '-Cs': tsSet.getAcquisition().getSphericalAberration(),
             '-Defoc': 0,  # disable defocus correction
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
