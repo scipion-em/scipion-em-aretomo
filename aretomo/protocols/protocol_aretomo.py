@@ -362,7 +362,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
-            '-Cs': 0,  # tsSet.getAcquisition().getSphericalAberration(),
+            '-Cs': tsSet.getAcquisition().getSphericalAberration(),
             '-Defoc': 0,  # disable defocus correction
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
