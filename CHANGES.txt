@@ -1,3 +1,7 @@
+3.9.0:
+    - Generates the output SetOfCtfTomoSeries if the CTF files are found
+    - Add dataimport module to parse the CTF generated so it can be called from the
+      centralized protocol for importing CTFs.
 3.8.1: bugfix for reading aln file with dark views removed
 3.8:
     - add aretomo2 1.0.0

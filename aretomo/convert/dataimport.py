@@ -25,83 +25,87 @@
 # **************************************************************************
 
 import os.path
-import pyworkflow.utils as pwutils 
-from pwem.objects import CTFModel, SetOfParticles
 
+import numpy as np
+import logging
+
+from tomo.utils import setWrongDefocus
+
+logger = logging.getLogger(__name__)
+
+import pyworkflow.utils as pwutils
+from pwem.objects import CTFModel
 
 with pwutils.weakImport('tomo'):
     from tomo.objects import CTFTomo
 
 
 class AretomoCtfParser:
-    """ Import CTF estimated with Aretomo. """
-    # def __init__(self, protocol):
-    #     self.protocol = protocol
-    #     self.copyOrLink = self.protocol.getCopyOrLink()
-
-    # def importCTF(self, mic, fileName):
-    #     """ Create a CTF model and populate its values.
-    #     :param mic: input micrograph object
-    #     :param fileName: input file to be parsed
-    #     :return: CTFModel object
-    #     """
-    #     ctf = CTFModel()
-    #     ctf.setMicrograph(mic)
-    #     readCtfModel(ctf, fileName)
-    #
-    #     fnBase = pwutils.removeExt(fileName)
-    #     psdFile = self._findPsdFile(fnBase)
-    #     ctf.setPsdFile(psdFile)
-    #
-    #     return ctf
+    """ Load and parse CTF estimated with Aretomo. """
 
     def parseTSDefocusFile(self, ts, fileName, output):
-        pass
-    #     """ Parse tilt-series ctf estimation file.
-    #     :param ts: input tilt-series
-    #     :param fileName: input file to be parsed
-    #     :param output: output CTFTomoSeries
-    #     """
-    #     tsId = ts.getTsId()
-    #     fnBase = os.path.join(os.path.dirname(fileName), tsId)
-    #     outputPsd = self._findPsdFile(fnBase)
-    #     ctfResult = parseCtffind4Output(fileName)
-    #     ctf = CTFModel()
-    #
-    #     for i, ti in enumerate(ts):
-    #         if ti.isEnabled():
-    #             self.getCtfTi(ctf, ctfResult, i, outputPsd)
-    #         else:
-    #             ctf.setStandardDefocus(0, 0, 0)
-    #         newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
-    #         newCtfTomo.setIndex(i + 1)
-    #         output.append(newCtfTomo)
-    #
-    #     output.calculateDefocusUDeviation()
-    #     output.calculateDefocusVDeviation()
-    #
-    # @staticmethod
-    # def getCtfTi(ctf, ctfArray, tiIndex, psdStack=None):
-    #     """ Parse the CTF object estimated for this Tilt-Image. """
-    #     readCtfModelStack(ctf, ctfArray, item=tiIndex)
-    #     if psdStack is not None:
-    #         ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
-    #
-    # @staticmethod
-    # def _findPsdFile(fnBase):
-    #     """ Try to find the given PSD file associated with the cttfind log file
-    #     We handle special cases of .ctf extension and _ctffind4 prefix for Relion runs
-    #     """
-    #     for suffix in ['_psd.mrc', '.mrc', '_ctf.mrcs',
-    #                    '.mrcs', '.ctf']:
-    #         psdPrefixes = [fnBase,
-    #                        fnBase.replace('_ctffind4', '')]
-    #         for prefix in psdPrefixes:
-    #             psdFile = prefix + suffix
-    #             if os.path.exists(psdFile):
-    #                 if psdFile.endswith('.ctf'):
-    #                     psdFile += ':mrc'
-    #                 return psdFile
-    #     return None
+        """ Parse tilt-series ctf estimation file.
+        :param ts: input tilt-series
+        :param fileName: input file to be parsed
+        :param output: output CTFTomoSeries
+        """
+        ctfResult = self.readAretomoCtfOutput(fileName)
+        ctf = CTFModel()
+        counter = 0
 
+        for i, ti in enumerate(ts):
+            if ti.isEnabled():
+                self.getCtfTi(ctf, ctfResult, counter)
+                counter += 1
+            else:
+                ctf.setStandardDefocus(0, 0, 0)
+            newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+            newCtfTomo.setIndex(i + 1)
+            output.append(newCtfTomo)
 
+    @staticmethod
+    def getCtfTi(ctfModel, ctfArray, item=0):
+        """ Set values for the ctfModel from an input list.
+        :param ctfModel: output CTF model
+        :param ctfArray: array with CTF values
+        :param item: which row to use from ctfArray
+        """
+        values = ctfArray[item]
+        if np.isnan(values).any(axis=0) or values[1] < 0 or values[2] < 0:
+            logger.debug(f"Invalid CTF values: {values}")
+            setWrongDefocus(ctfModel)
+            ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
+            ctfModel.setResolution(ctfResolution)
+        else:
+            # 1 micrograph number
+            # 2 - defocus 1 [A]
+            # 3 - defocus 2
+            # 4 - azimuth of astigmatism
+            # 5 - additional phase shift [radian]
+            # 6 - cross correlation
+            # 7 - spacing (in Angstroms) up to which CTF rings were fit successfully.
+            tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, spacing = values
+            ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
+        ctfModel.setFitQuality(ctfFit)
+        if ctfPhaseShift != 0:
+            ctfModel.setPhaseShift(np.rad2deg(ctfPhaseShift))
+
+    @staticmethod
+    def readAretomoCtfOutput(filename):
+        """ Reads an Aretomo CTF file and loads it as a numpy array with the following information for each line:
+        Columns:
+        #1 micrograph number
+        #2 - defocus 1 [A]
+        #3 - defocus 2
+        #4 - azimuth of astigmatism
+        #5 - additional phase shift [radian]
+        #6 - cross correlation
+        #7 - spacing (in Angstroms) up to which CTF rings were fit successfully.
+        :param filename: input file to read.
+        :return: a numpy array with the CTF values.
+        """
+        if os.path.exists(filename):
+            return np.loadtxt(filename, dtype=float, comments='#')
+        else:
+            logger.error(f"Warning: Missing file: {filename}")
+            return None
