@@ -444,6 +444,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 newTs.setSamplingRate(self._getOutputSampling())
                 outTsAligned.append(newTs)
                 accumDose = 0.
+                trMatrix = np.eye(3)
+                t = Transform()
+                t.setMatrix(trMatrix)
 
                 for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
                     if secNum in AretomoAln.sections:
@@ -453,6 +456,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         acq = tiltImage.getAcquisition()
                         acq.setTiltAxisAngle(0.)
                         newTi.setAcquisition(acq)
+                        newTi.setTransform(t)
 
                         secIndex = AretomoAln.sections.index(secNum)
                         newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
