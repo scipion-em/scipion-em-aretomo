@@ -63,11 +63,24 @@ def readAlnFile(alignFn: Union[str, os.PathLike]) -> Type[AretomoAln]:
     aln2xf conversion taken from https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py
     """
     # Read number of sections, as we need to ignore local alignments part of the file
+    comments = []
     with open(alignFn) as f:
-        f.readline()
-        numSec = f.readline().strip("#").split()[-1]
+        for line in f:
+            if line.startswith("# SEC"):
+                break
+            else:
+                comments.append(line)
 
-    data = np.loadtxt(alignFn, dtype=float, comments='#', skiprows=4, max_rows=int(numSec))
+    numSec, darkNum = 0, 0
+    for c in comments:
+        if c.startswith("# RawSize"):
+            numSec = int(c.split()[-1])
+        elif c.startswith("# DarkFrame"):
+            darkNum += 1
+
+    data = np.loadtxt(alignFn, dtype=float, comments='#',
+                      skiprows=len(comments)+1,
+                      max_rows=numSec-darkNum)
     AretomoAln.sections = list(data[:, 0].astype(int))  # SEC
     AretomoAln.tilt_angles = data[:, -1]  # TILT
     AretomoAln.tilt_axes = data[:, 1]  # ROT
