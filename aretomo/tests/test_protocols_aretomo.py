@@ -30,7 +30,7 @@ from tomo.objects import TomoAcquisition
 from tomo.protocols import ProtImportTs, ProtImportTsBase
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
 from ..protocols import ProtAreTomoAlignRecon
-from ..protocols.protocol_aretomo import OUT_TS, OUT_TOMO, OUT_TS_ALN
+from ..protocols.protocol_aretomo import OUT_TS, OUT_TOMO, OUT_TS_ALN, OUT_CTFS
 
 
 class TestAreTomoBase(TestBaseCentralizedLayer):
@@ -39,9 +39,11 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
     inputSoTS = None
     nTiltSeries = 2
     nTiltImages = 61
+    tomoThkBin2 = 200
     unbinnedSRate = 20.2
     unbinnedTsDims = [512, 512, 61]
     bin2TsDims = [256, 256, 61]
+    bin2TomoDims = [256, 256, 200]
     bin2SRate = 40.4
     tiltAxisAngle = -12.5
     voltage = 300
@@ -68,6 +70,7 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
 
     @classmethod
     def _runImportTiltSeries(cls):
+        print(magentaStr("\n==> Importing data - TiltSeries:"))
         cls.protImportTS = cls.newProtocol(ProtImportTs,
                                            filesPath=cls.inputDataSet.getFile('etomo'),
                                            filesPattern="BB{TS}.st",
@@ -89,28 +92,61 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
 
 class TestAreTomo(TestAreTomoBase):
     def test_alignAndReconstruct(self):
-        print(magentaStr("\n==> Importing data - TiltSeries:"))
         protImport = self._runImportTiltSeries()
-        print(magentaStr("\n==> Testing AreTomo (align and reconstruct):"))
+        print(magentaStr("\n==> Testing AreTomo:"
+                         "\n\t- Align and reconstruct"
+                         "\n\t- Interpolated TS not generated"
+                         "\n\t- No views are excluded"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=getattr(protImport, ProtImportTsBase.OUTPUT_NAME, None),
-                                tomoThickness=200, alignZ=180, tiltAxisAngle=self.tiltAxisAngle,
-                                darkTol=0.1)
-        self.launchProtocol(prot)
-        self.assertIsNotNone(getattr(prot, OUT_TOMO, None), "SetOfTomograms has not been produced.")
-
-    def test_align(self):
-        print(magentaStr("\n==> Importing data - TiltSeries:"))
-        protImport = self._runImportTiltSeries()
-        print(magentaStr("\n==> Testing AreTomo (align only, generate also the interpolated TS):"))
-        prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=getattr(protImport, ProtImportTsBase.OUTPUT_NAME, None),
-                                makeTomo=False, alignZ=180, tiltAxisAngle=self.tiltAxisAngle,
+                                tomoThickness=self.tomoThkBin2,
+                                alignZ=180,
+                                tiltAxisAngle=self.tiltAxisAngle,
                                 darkTol=0.1)
         self.launchProtocol(prot)
         # CHECK THE OUTPUTS----------------------------------------------------------------
         # Non-interpolated TS
-        self.checkTiltSeries(getattr(prot, OUT_TS, None),
+        self._checkNonInterpTsSet(getattr(prot, OUT_TS, None))
+
+        # CTFs
+        self._checkCTFs(getattr(prot, OUT_CTFS, None))
+
+        # Tomograms
+        self.checkTomograms(getattr(prot, OUT_TOMO, None),
+                            expectedSetSize=self.nTiltSeries,
+                            expectedSRate=self.bin2SRate,
+                            expectedDimensions=self.bin2TomoDims)
+
+    def test_align(self):
+        protImport = self._runImportTiltSeries()
+        print(magentaStr("\n==> Testing AreTomo:"
+                         "\n\t- Align only"
+                         "\n\t- Generate also the interpolated TS"
+                         "\n\t- No views are excluded"))
+        prot = self.newProtocol(ProtAreTomoAlignRecon,
+                                inputSetOfTiltSeries=getattr(protImport, ProtImportTsBase.OUTPUT_NAME, None),
+                                makeTomo=False,
+                                alignZ=180,
+                                tiltAxisAngle=self.tiltAxisAngle,
+                                darkTol=0.1)
+        self.launchProtocol(prot)
+        # CHECK THE OUTPUTS----------------------------------------------------------------
+        # Non-interpolated TS
+        self._checkNonInterpTsSet(getattr(prot, OUT_TS, None))
+
+        # Interpolated TS
+        self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
+                             expectedSetSize=self.nTiltSeries,
+                             expectedSRate=self.bin2SRate,  # Protocol sets the bin factor to 2 by default
+                             expectedDimensions=self.bin2TsDims,
+                             testAcqObj=self.testAcq,
+                             anglesCount=self.nTiltImages,
+                             isInterpolated=True)
+        # CTFs
+        self._checkCTFs(getattr(prot, OUT_CTFS, None))
+
+    def _checkNonInterpTsSet(self, tsSet):
+        self.checkTiltSeries(tsSet,
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
                              expectedDimensions=self.unbinnedTsDims,
@@ -118,12 +154,7 @@ class TestAreTomo(TestAreTomoBase):
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nTiltImages)
-        # Interpolated TS
-        self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
-                             expectedSetSize=self.nTiltSeries,
-                             expectedSRate=self.bin2SRate,  # Protocol sets the bin factor to 2 by default
-                             expectedDimensions=self.bin2TsDims,
-                             testAcqObj=self.testAcq,
-                             hasAlignment=False,
-                             anglesCount=self.nTiltImages,
-                             isInterpolated=True)
+
+    def _checkCTFs(self, ctfSet):
+        self.checkCTFs(ctfSet,
+                       expectedSetSize=self.nTiltSeries)
