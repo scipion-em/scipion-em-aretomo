@@ -137,7 +137,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         form.addParam('tomoThickness', params.IntParam,
                       condition='makeTomo', important=True,
-                      default=1200, label='Tomogram thickness (voxels)',
+                      default=1200, label='Tomogram thickness unbinned (voxels)',
                       help='Z height of the reconstructed volume in '
                            '*unbinned* voxels.')
 

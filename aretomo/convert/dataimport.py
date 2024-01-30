@@ -29,7 +29,6 @@ import os.path
 import numpy as np
 import logging
 
-from tomo.utils import setWrongDefocus
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +72,7 @@ class AretomoCtfParser:
         values = ctfArray[item]
         if np.isnan(values).any(axis=0) or values[1] < 0 or values[2] < 0:
             logger.debug(f"Invalid CTF values: {values}")
-            setWrongDefocus(ctfModel)
+            ctfModel.setWrongDefocus()
             ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
             ctfModel.setResolution(ctfResolution)
         else:
