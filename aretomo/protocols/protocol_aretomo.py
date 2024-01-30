@@ -280,11 +280,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         It should check its input and when ready conditions are met
         call the self._insertFunctionStep method.
         """
+        closeSetStepDeps=[]
         self.readingOutput()
         while True:
             listTSInput = list(self._getSetOfTiltSeries().getIdSet())
             if not self._getSetOfTiltSeries().isStreamOpen() and self.TS_read == listTSInput:
                 self.info('Input set closed, all items processed\n')
+                self._insertFunctionStep(self._closeOutputSet, prerquisites=closeSetStepDeps)
                 break
             for ts in self._getSetOfTiltSeries():
                 if ts.getObjId() not in self.TS_read:
@@ -298,12 +300,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         convertInput = self._insertFunctionStep(
                             self.convertInputStep, *args, prerequisites=[])
                         runAreTomo = self._insertFunctionStep(
-                            self.runAreTomoStep, *args,
-                            prerequisites=[convertInput])
-                        createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
-                                                                 prerequisites=[runAreTomo])
-                        self._insertFunctionStep(self.closeOutputSetsStep,
-                                                 prerequisites=[createOutputS])
+                            self.runAreTomoStep, *args,   prerequisites=[convertInput])
+                        createOutputS = self._insertFunctionStep(
+                            self.createOutputStep, *args, prerequisites=[runAreTomo])
+                        closeSetStepDeps.append(createOutputS)
+
                     except Exception as e:
                         self.error(f'Error reading TS info: {e}')
                         self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
@@ -418,18 +419,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         if self.makeTomo:
             outputSetOfTomograms = self.getOutputSetOfTomograms()
+
+            # Tomogram attributes
             newTomogram = Tomogram()
             tomoFileName = self.getFilePath(tsFn, extraPrefix, ".mrc")
             newTomogram.setLocation(tomoFileName)
-
-            # Set tomogram origin
-            x, y, z = self._getOutputDim(tomoFileName)
-            origin = Transform()
-            sr = self._getInputSampling() * self.binFactor.get()
-            origin.setShifts(x / -2. * sr,
-                             y / -2. * sr,
-                             z / -2. * sr)
-            newTomogram.setOrigin(origin)
+            newTomogram.setOrigin()
             newTomogram.setAcquisition(ts.getAcquisition())
             newTomogram.setTsId(tsId)
 

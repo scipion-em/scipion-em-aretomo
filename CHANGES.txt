@@ -6,6 +6,7 @@
     - Fix the origin set by Scipion to the generated tomograms.
   Developers:
     - Rewrite tests using the TCL from em-tomo and the reliontomo test dataset.
+3.8.2: bugfix: tomograms origin fixed and more robust
 3.8.1: bugfix for reading aln file with dark views removed
 3.8:
     - add aretomo2 1.0.0
