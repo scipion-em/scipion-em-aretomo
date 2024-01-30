@@ -89,7 +89,37 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
 
 class TestAreTomo(TestAreTomoBase):
 
-    def test_align(self):
+    def test_align_02(self):
+        inTs = self._runImportTs()
+        print(magentaStr("\n==> Testing AreTomo:"
+                         "\n\t- Align only"
+                         "\n\t- Generate also the interpolated TS"
+                         "\n\t- Some views are excluded"))
+        prot = self.newProtocol(ProtAreTomoAlignRecon,
+                                inputSetOfTiltSeries=inTs,
+                                makeTomo=False,
+                                alignZ=self.alignZ,
+                                binFactor=self.binFactor,
+                                # tiltAxisAngle=self.tiltAxisAngle,
+                                darkTol=0.7)
+        self.launchProtocol(prot)
+
+        # CHECK THE OUTPUTS
+        # Non-interpolated TS
+        self._checkNonInterpTsSet(getattr(prot, OUT_TS, None))
+
+        # Interpolated TS
+        self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
+                             expectedSetSize=self.nTiltSeries,
+                             expectedSRate=self.unbinnedSRate * self.binFactor,
+                             # Protocol sets the bin factor to 2 by default
+                             expectedDimensions=self.expectedDimsTs,
+                             testAcqObj=self.testAcq,
+                             isInterpolated=True)
+        # CTFs
+        self._checkCTFs(getattr(prot, OUT_CTFS, None))
+
+    def test_align_01(self):
         inTs = self._runImportTs()
         print(magentaStr("\n==> Testing AreTomo:"
                          "\n\t- Align only"
