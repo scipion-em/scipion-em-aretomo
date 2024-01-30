@@ -89,36 +89,6 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
 
 class TestAreTomo(TestAreTomoBase):
 
-    def test_align_02(self):
-        inTs = self._runImportTs()
-        print(magentaStr("\n==> Testing AreTomo:"
-                         "\n\t- Align only"
-                         "\n\t- Generate also the interpolated TS"
-                         "\n\t- Some views are excluded"))
-        prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=inTs,
-                                makeTomo=False,
-                                alignZ=self.alignZ,
-                                binFactor=self.binFactor,
-                                # tiltAxisAngle=self.tiltAxisAngle,
-                                darkTol=0.7)
-        self.launchProtocol(prot)
-
-        # CHECK THE OUTPUTS
-        # Non-interpolated TS
-        self._checkNonInterpTsSet(getattr(prot, OUT_TS, None))
-
-        # Interpolated TS
-        self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
-                             expectedSetSize=self.nTiltSeries,
-                             expectedSRate=self.unbinnedSRate * self.binFactor,
-                             # Protocol sets the bin factor to 2 by default
-                             expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=self.testAcq,
-                             isInterpolated=True)
-        # CTFs
-        self._checkCTFs(getattr(prot, OUT_CTFS, None))
-
     def test_align_01(self):
         inTs = self._runImportTs()
         print(magentaStr("\n==> Testing AreTomo:"
@@ -148,6 +118,39 @@ class TestAreTomo(TestAreTomoBase):
                              isInterpolated=True)
         # CTFs
         self._checkCTFs(getattr(prot, OUT_CTFS, None))
+
+    def test_align_02(self):
+        inTs = self._runImportTs()
+        print(magentaStr("\n==> Testing AreTomo:"
+                         "\n\t- Align only"
+                         "\n\t- Generate also the interpolated TS"
+                         "\n\t- Some views are excluded"))
+        prot = self.newProtocol(ProtAreTomoAlignRecon,
+                                inputSetOfTiltSeries=inTs,
+                                makeTomo=False,
+                                alignZ=self.alignZ,
+                                binFactor=self.binFactor,
+                                # tiltAxisAngle=self.tiltAxisAngle,
+                                darkTol=0.9)
+        self.launchProtocol(prot)
+
+        # CHECK THE OUTPUTS
+        exludedViews = {'TS_03': [0, 1, 2, 34, 35, 36, 27, 38, 39],
+                        'TS_54': [0, 1, 2, 39, 40]}
+        # Non-interpolated TS
+        self._checkNonInterpTsSet(getattr(prot, OUT_TS, None))
+
+        # Interpolated TS
+        self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
+                             expectedSetSize=self.nTiltSeries,
+                             expectedSRate=self.unbinnedSRate * self.binFactor,
+                             # Protocol sets the bin factor to 2 by default
+                             expectedDimensions=self.expectedDimsTs,
+                             testAcqObj=self.testAcq,
+                             isInterpolated=True,
+                             excludedViewsDict=exludedViews)
+        # CTFs
+        self._checkCTFs(getattr(prot, OUT_CTFS, None), excludedViewsDict=exludedViews)
 
     def test_alignAndReconstruct(self):
         inTs = self._runImportTs()
@@ -186,6 +189,7 @@ class TestAreTomo(TestAreTomoBase):
                              hasAlignment=True,
                              alignment=ALIGN_2D)
 
-    def _checkCTFs(self, ctfSet):
+    def _checkCTFs(self, ctfSet, excludedViewsDict=None):
         self.checkCTFs(ctfSet,
-                       expectedSetSize=self.nTiltSeries)
+                       expectedSetSize=self.nTiltSeries,
+                       excludedViewsDict=excludedViewsDict)

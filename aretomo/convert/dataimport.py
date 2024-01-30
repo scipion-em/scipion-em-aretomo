@@ -57,7 +57,7 @@ class AretomoCtfParser:
                 self.getCtfTi(ctf, ctfResult, counter)
                 counter += 1
             else:
-                ctf.setStandardDefocus(0, 0, 0)
+                ctf.setWrongDefocus()
             newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
             newCtfTomo.setIndex(i + 1)
             output.append(newCtfTomo)
@@ -70,11 +70,11 @@ class AretomoCtfParser:
         :param item: which row to use from ctfArray
         """
         values = ctfArray[item]
+        ctfPhaseShift = 0
+        ctfFit = -999
         if np.isnan(values).any(axis=0) or values[1] < 0 or values[2] < 0:
             logger.debug(f"Invalid CTF values: {values}")
             ctfModel.setWrongDefocus()
-            ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
-            ctfModel.setResolution(ctfResolution)
         else:
             # 1 micrograph number
             # 2 - defocus 1 [A]
