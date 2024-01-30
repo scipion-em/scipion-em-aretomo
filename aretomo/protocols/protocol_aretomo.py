@@ -425,7 +425,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             # Set tomogram origin
             x, y, z = self._getOutputDim(tomoFileName)
             origin = Transform()
-            sr = self._getInputSampling()
+            sr = self._getInputSampling() * self.binFactor.get()
             origin.setShifts(x / -2. * sr,
                              y / -2. * sr,
                              z / -2. * sr)
