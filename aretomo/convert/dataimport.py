@@ -58,7 +58,15 @@ class AretomoCtfParser:
                 counter += 1
             else:
                 ctf.setWrongDefocus()
+
+                ctf.setEnabled(False)
             newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+            # The enabled attribute has to be managed here because the method ctfModelToCtfTomo can't copy that
+            # attribute as it is a python boolean instead of a Scipion Boolean object. This is because that attribute
+            # belongs to the class Object, which is above in the hierarchy than the Scipion types, so it can't follow
+            # their setters and getters logic, failing when trying to copy the mentioned attribute
+            if not ti.isEnabled():
+                newCtfTomo.setEnabled(False)
             newCtfTomo.setIndex(i + 1)
             output.append(newCtfTomo)
 
