@@ -3,6 +3,7 @@
 # * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
 # *              Federico P. de Isidro Gomez (fp.deisidro@cnb.csic.es) [2]
 # *              Alberto Garcia Mena (alberto.garcia@cnb.csic.es) [2]
+# *              Scipion Team (scipion@cnb.csic.es) [2]
 # *
 # * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
 # * [2] Centro Nacional de Biotecnologia, CSIC, Spain
@@ -35,7 +36,7 @@ from typing import List, Literal, Tuple, Union, Optional
 
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
-from pyworkflow.object import Set
+from pyworkflow.object import Set, String
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
@@ -70,6 +71,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         self.stepsExecutionMode = STEPS_PARALLEL
         self.TS_read = []
         self.outputSOTSList_objID = []
+        self.badTsAliMsg = String()
+        self.badTomoRecMsg = String()
+        self.noneGeneratedMsg = String()
 
         # --------------------------- DEFINE param functions ----------------------
 
@@ -296,8 +300,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                               f"TS_ID read: {self.TS_read}\n")
                     self.TS_read.append(ts.getObjId())
                     try:
-                        args = (ts.getObjId(), ts.getTsId(),
-                                ts.getFirstItem().getFileName())
+                        args = (ts.getObjId(), ts.getTsId(), ts.getFirstItem().getFileName())
                         convertInput = self._insertFunctionStep(
                             self.convertInputStep, *args, prerequisites=[])
                         runAreTomo = self._insertFunctionStep(
@@ -416,14 +419,72 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         if not (self.makeTomo and self.skipAlign):
             AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"))
+            # We found the following behavior to be happening sometimes (non-systematically):
+            # It can be observed that the tilt angles are badly set for the non-excluded views:
+            #
+            # AreTomo Alignment / Priims bprmMn
+            # RawSize = 512 512 61
+            # NumPatches = 0
+            # DarkFrame =     0    0   -55.00
+            # DarkFrame =     1    1   -53.00
+            # DarkFrame =     2    2   -51.00
+            # DarkFrame =     3    3   -49.00
+            # DarkFrame =     4    4   -47.00
+            # DarkFrame =     5    5   -45.00
+            # DarkFrame =     6    6   -43.00
+            # DarkFrame =    58   58    61.00
+            # DarkFrame =    59   59    63.00
+            # DarkFrame =    60   60    65.00
+            # SEC     ROT         GMAG       TX          TY      SMEAN     SFIT    SCALE     BASE     TILT
+            #     7   -10.6414    1.00000     30.409     -7.146     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+            #     8   -10.6414    1.00000     25.102     -4.066     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+            #     9   -10.6414    1.00000     28.247     -7.649     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+            #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+            #
+            # Hence, the output tilt angles will be checked before storing the corresponding outputs
+            inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
+            aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
+            if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=1e3):
+                msg = 'tsId = %s. Bad tilt angle values detected. Skipping...' % tsId
+                self.info(msg)
+                outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
+                self.badTsAliMsg.set(outMsg)
+                self._store(self.badTsAliMsg)
+                return
+
             alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
         if self.makeTomo:
+            # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
+            # related to graphic cards with a compute capability greater than 8.6. The behavior observed is detailed
+            # below:
+            #
+            # The non-systematic behavior reported is based on the fact that the dimensions of the tomograms
+            # reconstructed (bin 4) are:
+            #
+            # Sometimes both are well --> dimensions: 958 x 926 x 300
+            # Sometimes both are wrong --> dimensions: 958 x no.TiltImages x 926
+            # Sometimes one is well and the other wrong, changing the one which is well and the one which is wrong
+            # across multiple executions.
+            #
+            # Until it's clarified, we'll check the dimensions of the generated tomogram and avoid storing the
+            # corresponding results if it was badly generated (consequence of a bad alignment with weird tilt angle
+            # values, see comment above).
+            #
+            # Hence, the output tilt angles will be checked before storing the corresponding outputs
+            tomoFileName = self.getFilePath(tsFn, extraPrefix, ".mrc")
+            tomoDims = self._getOutputDim(tomoFileName)
+            if np.any(np.array(tomoDims) == len(ts)):
+                msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
+                self.info('Tilt series skipped because of a bad reconstruction. ' + msg)
+                outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
+                self.badTomoRecMsg.set(outMsg)
+                self._store(self.badTomoRecMsg)
+                return
             outputSetOfTomograms = self.getOutputSetOfTomograms()
-
             # Tomogram attributes
             newTomogram = Tomogram()
-            newTomogram.setLocation(self.getFilePath(tsFn, extraPrefix, ".mrc"))
+            newTomogram.setLocation(tomoFileName)
             newTomogram.setSamplingRate(outputSetOfTomograms.getSamplingRate())
             newTomogram.setOrigin()
             newTomogram.setAcquisition(ts.getAcquisition())
@@ -499,46 +560,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     newTi.setEnabled(False)
                     transform.setMatrix(np.identity(3))
                 else:
-                    # set tilt angles
+                    # set the tilt angles
                     secIndex = AretomoAln.sections.index(secNum)
                     acq = tiltImage.getAcquisition()
-
-                    # AreTomo Alignment / Priims bprmMn
-                    # RawSize = 512 512 61
-                    # NumPatches = 0
-                    # DarkFrame =     0    0   -55.00
-                    # DarkFrame =     1    1   -53.00
-                    # DarkFrame =     2    2   -51.00
-                    # DarkFrame =     3    3   -49.00
-                    # DarkFrame =     4    4   -47.00
-                    # DarkFrame =     5    5   -45.00
-                    # DarkFrame =     6    6   -43.00
-                    # DarkFrame =    58   58    61.00
-                    # DarkFrame =    59   59    63.00
-                    # DarkFrame =    60   60    65.00
-                    # SEC     ROT         GMAG       TX          TY      SMEAN     SFIT    SCALE     BASE     TILT
-                    #     7   -10.6414    1.00000     30.409     -7.146     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     8   -10.6414    1.00000     25.102     -4.066     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     9   -10.6414    1.00000     28.247     -7.649     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    11   -10.6414    1.00000     24.933     -9.522     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    12   -10.6414    1.00000     19.320     -6.462     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    13   -10.6414    1.00000     22.578     -7.041     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    14   -10.6414    1.00000     21.910     -2.594     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    15   -10.6414    1.00000     18.168     -5.507     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    16   -10.6414    1.00000     15.749     -3.227     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    17   -10.6414    1.00000     18.577     -4.008     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    18   -10.6414    1.00000     17.274     -3.275     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    19   -10.6414    1.00000     16.170     -2.907     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    20   -10.6414    1.00000     15.095      0.008     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    21   -10.6414    1.00000     15.115     -3.432     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    22   -10.6414    1.00000     15.235     -2.043     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    23   -10.6414    1.00000     14.124     -0.517     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-
-                    # TODO: Once the ali files generated by aretomo provide the correct values for tilt angles,
-                    # uncomment the two following line
-
-                    # newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
+                    newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
                     acq.setTiltAxisAngle(AretomoAln.tilt_axes[secIndex])
                     newTi.setAcquisition(acq)
 
@@ -583,6 +608,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputCtfs.write()
             self._store(outputCtfs)
 
+    def _closeOutputSet(self):
+        super()._closeOutputSet()
+        if self.makeTomo:
+            outSet = getattr(self, OUT_TOMO, [])
+        else:
+            outSet = getattr(self, OUT_TS, [])
+        if len(outSet) == 0:
+            msg = ('All the introduced Tilt Series were not correctly aligned and/or all the corresponding '
+                   'tomograms were not correctly generated.')
+            self.noneGeneratedMsg.set(msg)
+            raise Exception(msg)
+
     # --------------------------- INFO functions ------------------------------
     def _summary(self) -> List[str]:
         summary = []
@@ -598,6 +635,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            f"{self.outputSetOfTiltSeries.getSize()}")
         else:
             summary.append("Output is not ready yet.")
+
+        if self.noneGeneratedMsg.get():
+            summary.append('*ERROR!*\n' + self.noneGeneratedMsg.get())
+
+        else:
+            if self.badTsAliMsg.get():
+                summary.append('*WARNING!*' + self.badTsAliMsg.get())
+
+            if self.badTomoRecMsg.get():
+                summary.append('*WARNING!*\nSome tilt series were skipped because of a bad reconstruction:' +
+                               self.badTomoRecMsg.get())
 
         if self._saveInterpolated() and not self.makeTomo:
             summary.append("*Interpolated TS stack may have a few "
@@ -665,8 +713,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTomograms.setSamplingRate(self._getOutputSampling())
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{OUT_TOMO: outputSetOfTomograms})
-            self._defineSourceRelation(self.inputSetOfTiltSeries,
-                                       outputSetOfTomograms)
+            self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTomograms)
         return self.outputSetOfTomograms
 
     def getOutputSetOfTiltSeries(self,

@@ -80,6 +80,7 @@ class AretomoCtfParser:
         values = ctfArray[item]
         ctfPhaseShift = 0
         ctfFit = -999
+        resolution = -999
         if np.isnan(values).any(axis=0) or values[1] < 0 or values[2] < 0:
             logger.debug(f"Invalid CTF values: {values}")
             ctfModel.setWrongDefocus()
@@ -91,9 +92,14 @@ class AretomoCtfParser:
             # 5 - additional phase shift [radian]
             # 6 - cross correlation
             # 7 - spacing (in Angstroms) up to which CTF rings were fit successfully.
-            tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, spacing = values
+            # From a conversation with B. K. regarding the resolution value: "I think it is column #7. I believe that
+            # Shawn was hesitant to call it resolution, as in his view the resolution might be higher, but it states
+            # the resolution to which the ctf fit is reliable. In the end, I believe that the indication by ctffinf
+            # is similar"
+            tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, resolution = values
             ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
         ctfModel.setFitQuality(ctfFit)
+        ctfModel.setResolution(resolution)
         if ctfPhaseShift != 0:
             ctfModel.setPhaseShift(np.rad2deg(ctfPhaseShift))
 
