@@ -4,6 +4,7 @@
     - Add dataimport module to parse the CTF generated so it can be called from the
       centralized protocol for importing CTFs.
     - Fix the origin set by Scipion to the generated tomograms.
+    - Outputs are not stored in case the are not correctly generated.
   Developers:
     - Rewrite tests using the TCL from em-tomo and the reliontomo test dataset.
 3.8.2: bugfix: tomograms origin fixed and more robust

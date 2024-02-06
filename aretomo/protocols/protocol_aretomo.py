@@ -445,8 +445,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
             aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
             if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=1e3):
-                msg = 'tsId = %s. Bad tilt angle values detected. Skipping...' % tsId
-                self.info(msg)
+                msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
+                self.info(msg + ' Skipping...')
                 outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
                 self.badTsAliMsg.set(outMsg)
                 self._store(self.badTsAliMsg)
