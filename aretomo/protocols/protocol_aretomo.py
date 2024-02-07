@@ -284,7 +284,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             listTSInput = list(self._getSetOfTiltSeries().getIdSet())
             if not self._getSetOfTiltSeries().isStreamOpen() and self.TS_read == listTSInput:
                 self.info('Input set closed, all items processed\n')
-                self._insertFunctionStep(self._closeOutputSet, prerquisites=closeSetStepDeps)
+                self._insertFunctionStep(self._closeOutputSet, prerequisites=closeSetStepDeps)
                 break
             for ts in self._getSetOfTiltSeries():
                 if ts.getObjId() not in self.TS_read:
