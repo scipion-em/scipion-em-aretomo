@@ -101,7 +101,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'aligned tilt-series.')
 
         form.addParam('makeTomo', params.BooleanParam,
-                      default=True, label='Reconstruct tomogram?',
+                      default=True, label='Reconstruct the tomograms?',
                       help='You can skip tomogram reconstruction, so that input '
                            'tilt-series will be only aligned.')
 
@@ -184,6 +184,20 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "3 - generate global and local-aligned tilt series stack. "
                            "High frequencies are enhanced to alleviate the attenuation "
                            "due to interpolation.")
+
+        form.addSection(label='CTF')
+        form.addParam('doEstimateCtf', params.BooleanParam,
+                      default=True, label='Estimate the CTF?',
+                      condition='not (skipAlign and makeTomo)')
+
+        form.addParam('doPhaseShiftSearch', params.BooleanParam,
+                      default=False, label='Do phase shift estimation?',
+                      condition='doEstimateCtf')
+        linePhaseShift = form.addLine('Phase shift range (deg.)',
+                                      condition='doPhaseShiftSearch',
+                                      help="Search range of the phase shift (start, end).")
+        linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0, label='min', condition='doPhaseShiftSearch')
+        linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0, label='max', condition='doPhaseShiftSearch')
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -369,11 +383,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
-            '-Cs': tsSet.getAcquisition().getSphericalAberration(),
             # '-Defoc': 0,  # disable defocus correction  # This parameter does not appear in the manual of Aretomo2_1.0.0
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
         }
+        # Manage the CTF estimation:
+        # Extracted from Aretomo2 manual:
+        #   Since version 1.4.0 AreTomo2 has added a function that estimates the CTF of each tilt images This
+        #   function will be enabled when users provide pixel size, high tension, and spherical aberration Cs of the
+        #   tilt series. The following is an example of the corresponding command line parameters.
+        #
+        #   AreTomo2 ………. -PixSize 2.4 -Kv 300 -Cs 2.7
+        #
+        # Thus, parameters PixSize, Kv and Cs are involved. Since the first two are also used for the dose weighting
+        # and the third is only used for the CTF estimation, we'll add it or not to the command sent to AreTomo2
+        # depending on the user's choice regarding the estimation or not of the CTF
+        if self.doEstimateCtf.get():
+            args['-Cs'] = tsSet.getAcquisition().getSphericalAberration()
+            if self.doPhaseShiftSearch.get():
+                args['-ExtPhase'] = f'{self.minPhaseShift.get()} {self.maxPhaseShift.get()}'
 
         if not self.useInputProt:
             args['-Align'] = 0 if self.skipAlign else 1
@@ -444,7 +472,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             # Hence, the output tilt angles will be checked before storing the corresponding outputs
             inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
             aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
-            if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=1e3):
+            if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
                 msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
                 self.info(msg + ' Skipping...')
                 outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
@@ -591,22 +619,23 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self._store(outputSetOfTiltSeries)
 
             # Output set of CTF tomo series ----------------------------------------
-            outputCtfs = self.getOutputSetOfCtfs()
+            if self.doEstimateCtf.get():
+                outputCtfs = self.getOutputSetOfCtfs()
 
-            newCTFTomoSeries = CTFTomoSeries()
-            newCTFTomoSeries.copyInfo(newTs)
-            newCTFTomoSeries.setTiltSeries(newTs)
-            newCTFTomoSeries.setObjId(ts.getObjId())
-            newCTFTomoSeries.setTsId(tsId)
-            outputCtfs.append(newCTFTomoSeries)
+                newCTFTomoSeries = CTFTomoSeries()
+                newCTFTomoSeries.copyInfo(newTs)
+                newCTFTomoSeries.setTiltSeries(newTs)
+                newCTFTomoSeries.setObjId(ts.getObjId())
+                newCTFTomoSeries.setTsId(tsId)
+                outputCtfs.append(newCTFTomoSeries)
 
-            outputFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
-            ap = AretomoCtfParser()
-            ap.parseTSDefocusFile(newTs, outputFile, newCTFTomoSeries)
+                outputFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
+                ap = AretomoCtfParser()
+                ap.parseTSDefocusFile(newTs, outputFile, newCTFTomoSeries)
 
-            outputCtfs.update(newCTFTomoSeries)
-            outputCtfs.write()
-            self._store(outputCtfs)
+                outputCtfs.update(newCTFTomoSeries)
+                outputCtfs.write()
+                self._store(outputCtfs)
 
     def _closeOutputSet(self):
         super()._closeOutputSet()

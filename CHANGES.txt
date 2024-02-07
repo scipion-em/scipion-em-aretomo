@@ -1,5 +1,7 @@
 3.9.0:
   Users:
+    - The protocol form now present CTF-related parameters, to choose if estimate it or
+      not and phase plate acquisition related params (estimate the phase shift).
     - Generates the output SetOfCtfTomoSeries if the CTF files are found
     - Add dataimport module to parse the CTF generated so it can be called from the
       centralized protocol for importing CTFs.

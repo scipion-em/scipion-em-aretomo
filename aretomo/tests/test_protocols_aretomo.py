@@ -97,10 +97,12 @@ class TestAreTomo(TestAreTomoBase):
         print(magentaStr("\n==> Testing AreTomo:"
                          "\n\t- Align only"
                          "\n\t- Generate also the interpolated TS"
-                         "\n\t- No views are excluded"))
+                         "\n\t- No views are excluded"
+                         "\n\t- CTF not generated"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=self.inTsSet,
                                 makeTomo=False,
+                                doEstimateCtf=False,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
                                 darkTol=0.1)
@@ -119,7 +121,7 @@ class TestAreTomo(TestAreTomoBase):
                              testAcqObj=self.testAcq,
                              isInterpolated=True)
         # CTFs
-        self._checkCTFs(getattr(prot, OUT_CTFS, None))
+        self.assertIsNone(getattr(prot, OUT_CTFS, None))
 
     def test_align_02(self):
         exludedViews = {'TS_03': [0, 1, 2, 34, 35, 36, 37, 38, 39],
@@ -130,7 +132,8 @@ class TestAreTomo(TestAreTomoBase):
         print(magentaStr("\n==> Testing AreTomo:"
                          "\n\t- Align only"
                          "\n\t- Generate also the interpolated TS"
-                         "\n\t- Some views are excluded"))
+                         "\n\t- Some views are excluded"
+                         "\n\t- CTF generated"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=self.inTsSet,
                                 makeTomo=False,
@@ -159,7 +162,8 @@ class TestAreTomo(TestAreTomoBase):
         print(magentaStr("\n==> Testing AreTomo:"
                          "\n\t- Align and reconstruct"
                          "\n\t- Interpolated TS not generated"
-                         "\n\t- No views are excluded"))
+                         "\n\t- No views are excluded"
+                         "\n\t- CTF generated"))
         prot = self.newProtocol(ProtAreTomoAlignRecon,
                                 inputSetOfTiltSeries=self.inTsSet,
                                 tomoThickness=self.unbinnedThk,
