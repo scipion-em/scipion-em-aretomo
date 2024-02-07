@@ -106,7 +106,7 @@ class TestAreTomo(TestAreTomoBase):
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
                                 darkTol=0.1)
-        prot.setObjLabel('Align only')
+        prot.setObjLabel('Align only, no CTF')
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
