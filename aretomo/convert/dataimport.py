@@ -42,6 +42,9 @@ with pwutils.weakImport('tomo'):
 class AretomoCtfParser:
     """ Load and parse CTF estimated with Aretomo. """
 
+    def __init__(self, protocol):
+        self.protocol = protocol
+
     def parseTSDefocusFile(self, ts, fileName, output):
         """ Parse tilt-series ctf estimation file.
         :param ts: input tilt-series

@@ -630,7 +630,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 outputCtfs.append(newCTFTomoSeries)
 
                 outputFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
-                ap = AretomoCtfParser()
+                ap = AretomoCtfParser(self)
                 ap.parseTSDefocusFile(newTs, outputFile, newCTFTomoSeries)
 
                 outputCtfs.update(newCTFTomoSeries)
