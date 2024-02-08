@@ -9,6 +9,7 @@
     - Outputs are not stored in case the are not correctly generated.
   Developers:
     - Rewrite tests using the TCL from em-tomo and the reliontomo test dataset.
+3.8.3: typo bugfix
 3.8.2: bugfix: tomograms origin fixed and more robust
 3.8.1: bugfix for reading aln file with dark views removed
 3.8:
