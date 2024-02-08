@@ -52,10 +52,10 @@ class AretomoCtfParser:
         :param output: output CTFTomoSeries
         """
         ctfResult = self.readAretomoCtfOutput(fileName)
-        ctf = CTFModel()
         counter = 0
 
         for i, ti in enumerate(ts):
+            ctf = CTFModel()
             if ti.isEnabled():
                 self.getCtfTi(ctf, ctfResult, counter)
                 counter += 1
