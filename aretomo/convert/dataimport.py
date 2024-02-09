@@ -25,10 +25,12 @@
 # **************************************************************************
 
 import os.path
+from os.path import exists
 
 import numpy as np
 import logging
 
+from pyworkflow.utils import replaceExt
 
 logger = logging.getLogger(__name__)
 
@@ -51,18 +53,19 @@ class AretomoCtfParser:
         :param fileName: input file to be parsed
         :param output: output CTFTomoSeries
         """
+        psdFile = replaceExt(fileName, 'mrc')
+        psdFile = psdFile if exists(psdFile) else None
         ctfResult = self.readAretomoCtfOutput(fileName)
         counter = 0
 
         for i, ti in enumerate(ts):
             ctf = CTFModel()
             if ti.isEnabled():
-                self.getCtfTi(ctf, ctfResult, counter)
+                self._getCtfTi(ctf, ctfResult, item=counter, psdFile=psdFile)
                 counter += 1
             else:
                 ctf.setWrongDefocus()
 
-                ctf.setEnabled(False)
             newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
             # The enabled attribute has to be managed here because the method ctfModelToCtfTomo can't copy that
             # attribute as it is a python boolean instead of a Scipion Boolean object. This is because that attribute
@@ -74,11 +77,12 @@ class AretomoCtfParser:
             output.append(newCtfTomo)
 
     @staticmethod
-    def getCtfTi(ctfModel, ctfArray, item=0):
+    def _getCtfTi(ctfModel, ctfArray, item=0, psdFile=None):
         """ Set values for the ctfModel from an input list.
         :param ctfModel: output CTF model
         :param ctfArray: array with CTF values
         :param item: which row to use from ctfArray
+        :param psdFile: psd file name, including the path.
         """
         values = ctfArray[item]
         ctfPhaseShift = 0
@@ -105,6 +109,8 @@ class AretomoCtfParser:
         ctfModel.setResolution(resolution)
         if ctfPhaseShift != 0:
             ctfModel.setPhaseShift(np.rad2deg(ctfPhaseShift))
+        if psdFile:
+            ctfModel.setPsdFile(f"{item + 1}@" + psdFile)
 
     @staticmethod
     def readAretomoCtfOutput(filename):

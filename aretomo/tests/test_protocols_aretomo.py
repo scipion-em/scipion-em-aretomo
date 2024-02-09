@@ -199,4 +199,5 @@ class TestAreTomo(TestAreTomoBase):
     def _checkCTFs(self, ctfSet, excludedViewsDict=None):
         self.checkCTFs(ctfSet,
                        expectedSetSize=self.nTiltSeries,
-                       excludedViewsDict=excludedViewsDict)
+                       excludedViewsDict=excludedViewsDict,
+                       expectedPsdFile=True)
