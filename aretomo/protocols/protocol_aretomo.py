@@ -74,6 +74,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
         self.noneGeneratedMsg = String()
+        self.excludedViewsMsg = String()
 
         # --------------------------- DEFINE param functions ----------------------
 
@@ -535,6 +536,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 t = Transform()
                 t.setMatrix(trMatrix)
 
+                excludedViewsList = []
                 for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
                     if secNum in AretomoAln.sections:
                         newTi = TiltImage()
@@ -552,6 +554,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         newTi.setSamplingRate(self._getOutputSampling())
                         newTs.append(newTi)
                         accumDose = acq.getAccumDose()
+                    else:
+                        excludedViewsList.append(secNum)
+                if excludedViewsList:
+                    prevMsg = self.excludedViewsMsg.get() if self.excludedViewsMsg.get() else ''
+                    self.excludedViewsMsg.set(prevMsg + f'\n{tsId}: {excludedViewsList}')
 
                 acq = newTs.getAcquisition()
                 acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
@@ -676,9 +683,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 summary.append('*WARNING!*\nSome tilt series were skipped because of a bad reconstruction:' +
                                self.badTomoRecMsg.get())
 
-        if self._saveInterpolated() and not self.makeTomo:
-            summary.append("*Interpolated TS stack may have a few "
-                           "dark tilt images removed.*")
+        if self._saveInterpolated() and not self.makeTomo and self.excludedViewsMsg.get():
+            summary.append("*Interpolated TS stacks have a few dark tilt images removed.*\n" +
+                           self.excludedViewsMsg.get())
 
         return summary
 
