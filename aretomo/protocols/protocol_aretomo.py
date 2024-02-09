@@ -559,6 +559,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if excludedViewsList:
                     prevMsg = self.excludedViewsMsg.get() if self.excludedViewsMsg.get() else ''
                     self.excludedViewsMsg.set(prevMsg + f'\n{tsId}: {excludedViewsList}')
+                    self._store(self.excludedViewsMsg)
 
                 acq = newTs.getAcquisition()
                 acq.setAccumDose(accumDose)  # set accum dose from the last tilt-image
