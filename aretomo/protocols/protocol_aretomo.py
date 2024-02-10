@@ -49,7 +49,7 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile
 from ..convert.dataimport import AretomoCtfParser
-from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
+from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES, V1_3_4
 
 
 OUT_TS = "TiltSeries"
@@ -180,21 +180,22 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "High frequencies are enhanced to alleviate the attenuation "
                            "due to interpolation.")
 
-        form.addSection(label='CTF')
-        form.addParam('doEstimateCtf', params.BooleanParam,
-                      default=True, label='Estimate the CTF?',
-                      condition='not (skipAlign and makeTomo)')
+        if Plugin.getActiveVersion() != V1_3_4:
+            form.addSection(label='CTF')
+            form.addParam('doEstimateCtf', params.BooleanParam,
+                          default=True, label='Estimate the CTF?',
+                          condition='not (skipAlign and makeTomo)')
 
-        form.addParam('doPhaseShiftSearch', params.BooleanParam,
-                      default=False, label='Do phase shift estimation?',
-                      condition='doEstimateCtf')
-        linePhaseShift = form.addLine('Phase shift range (deg.)',
-                                      condition='doPhaseShiftSearch',
-                                      help="Search range of the phase shift (start, end).")
-        linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0,
-                                label='min', condition='doPhaseShiftSearch')
-        linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0,
-                                label='max', condition='doPhaseShiftSearch')
+            form.addParam('doPhaseShiftSearch', params.BooleanParam,
+                          default=False, label='Do phase shift estimation?',
+                          condition='doEstimateCtf')
+            linePhaseShift = form.addLine('Phase shift range (deg.)',
+                                          condition='doPhaseShiftSearch',
+                                          help="Search range of the phase shift (start, end).")
+            linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0,
+                                    label='min', condition='doPhaseShiftSearch')
+            linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0,
+                                    label='max', condition='doPhaseShiftSearch')
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -384,7 +385,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-Gpu': '%(GPU)s'
         }
 
-        if self.doEstimateCtf.get():
+        if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf.get():
             args['-Cs'] = tsSet.getAcquisition().getSphericalAberration()
             if self.doPhaseShiftSearch.get():
                 args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
@@ -612,7 +613,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self._store(outputSetOfTiltSeries)
 
             # Output set of CTF tomo series
-            if self.doEstimateCtf:
+            if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf:
                 outputCtfs = self.getOutputSetOfCtfs()
 
                 newCTFTomoSeries = CTFTomoSeries()
@@ -649,25 +650,24 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             summary.append(f"Input tilt-series: "
                            f"{self._getSetOfTiltSeries().getSize()}.\n"
                            f"Tomograms reconstructed: "
-                           f"{self.outputSetOfTomograms.getSize()}.\n")
+                           f"{getattr(self, OUT_TOMO).getSize()}.\n")
         elif hasattr(self, OUT_TS):
             summary.append(f"Input tilt-series: "
                            f"{self._getSetOfTiltSeries().getSize()}.\n"
                            f"Tilt series aligned: "
-                           f"{self.outputSetOfTiltSeries.getSize()}")
+                           f"{getattr(self, OUT_TS).getSize()}")
         else:
             summary.append("Output is not ready yet.")
 
-        if self.noneGeneratedMsg.get():
+        if self.isFinished() and self.noneGeneratedMsg.get():
             summary.append('*ERROR!*\n' + self.noneGeneratedMsg.get())
 
-        else:
-            if self.badTsAliMsg.get():
-                summary.append('*WARNING!*' + self.badTsAliMsg.get())
+        if self.badTsAliMsg.get():
+            summary.append('*WARNING!*' + self.badTsAliMsg.get())
 
-            if self.badTomoRecMsg.get():
-                summary.append('*WARNING!*\nSome tilt series were skipped because of a bad reconstruction:' +
-                               self.badTomoRecMsg.get())
+        if self.badTomoRecMsg.get():
+            summary.append('*WARNING!*\nSome tilt series were skipped because of a bad reconstruction:' +
+                           self.badTomoRecMsg.get())
 
         if self._saveInterpolated() and not self.makeTomo and self.excludedViewsMsg.get():
             summary.append("*Interpolated TS stacks have a few dark tilt images removed.*\n" +
@@ -707,8 +707,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     # --------------------------- UTILS functions -----------------------------
     def readingOutput(self) -> None:
         try:
-            if self.outputSetOfTiltSeries:
-                for ts in self.outputSetOfTiltSeries:
+            if hasattr(self, OUT_TS):
+                for ts in getattr(self, OUT_TS):
                     self.TS_read.append(ts.getObjId())
             self.info(f'Tomograms calculated for this TS_ID : {self.TS_read}')
             self.outputSOTSList_objID = self.TS_read
@@ -727,8 +727,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         return os.path.join(prefix, fileName + fileExtension)
 
     def getOutputSetOfTomograms(self) -> SetOfTomograms:
-        if hasattr(self, OUT_TOMO):
-            self.outputSetOfTomograms.enableAppend()
+        outputTomo = getattr(self, OUT_TOMO, None)
+        if outputTomo:
+            outputTomo.enableAppend()
         else:
             outputSetOfTomograms = self._createSetOfTomograms()
             outputSetOfTomograms.copyInfo(self._getSetOfTiltSeries())
@@ -736,12 +737,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{OUT_TOMO: outputSetOfTomograms})
             self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTomograms)
-        return self.outputSetOfTomograms
+        return outputTomo
 
     def getOutputSetOfTiltSeries(self,
                                  outputName: Literal[OUT_TS, OUT_TS_ALN] = OUT_TS) -> SetOfTiltSeries:
-        if hasattr(self, outputName):
-            getattr(self, outputName).enableAppend()
+        outputTS = getattr(self, outputName, None)
+        if outputTS:
+            outputTS.enableAppend()
         else:
             if outputName == OUT_TS_ALN:
                 suffix = "_interpolated"
@@ -759,7 +761,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self._defineOutputs(**{outputName: outputSetOfTiltSeries})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTiltSeries)
-        return getattr(self, outputName)
+        return outputTS
 
     def getOutputSetOfCtfs(self) -> SetOfCTFTomoSeries:
         outputCtfs = getattr(self, OUT_CTFS, None)
