@@ -47,14 +47,15 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries)
 
 from .. import Plugin
-from aretomo.convert.convert import getTransformationMatrix, readAlnFile
-from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
+from ..convert.convert import getTransformationMatrix, readAlnFile
 from ..convert.dataimport import AretomoCtfParser
+from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
 
-OUT_TS = "outputSetOfTiltSeries"
-OUT_TS_ALN = "outputInterpolatedSetOfTiltSeries"
-OUT_TOMO = "outputSetOfTomograms"
-OUT_CTFS = "SetOfCTFTomoSeries"
+
+OUT_TS = "TiltSeries"
+OUT_TS_ALN = "InterpolatedTiltSeries"
+OUT_TOMO = "Tomograms"
+OUT_CTFS = "CTFTomoSeries"
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
@@ -79,13 +80,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         # --------------------------- DEFINE param functions ----------------------
 
     def _defineParams(self, form):
-        # Keep this for compatibility with older plugin versions
-        form.addHidden('tiltAxisAngle', params.FloatParam,
-                       default=0., label='Tilt axis angle',
-                       help='Note that the orientation of tilt axis is '
-                            'relative to the y-axis (vertical axis of '
-                            'tilt image) and rotates counter-clockwise.\n'
-                            'NOTE: this is the same convention as IMOD.')
         form.addSection(label='Input')
         form.addParam('inputSetOfTiltSeries',
                       params.PointerParam,
@@ -197,8 +191,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         linePhaseShift = form.addLine('Phase shift range (deg.)',
                                       condition='doPhaseShiftSearch',
                                       help="Search range of the phase shift (start, end).")
-        linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0, label='min', condition='doPhaseShiftSearch')
-        linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0, label='max', condition='doPhaseShiftSearch')
+        linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0,
+                                label='min', condition='doPhaseShiftSearch')
+        linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0,
+                                label='max', condition='doPhaseShiftSearch')
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -384,25 +380,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
             '-PixSize': tsSet.getSamplingRate(),
             '-Kv': tsSet.getAcquisition().getVoltage(),
-            # '-Defoc': 0,  # disable defocus correction  # This parameter does not appear in the manual of Aretomo2_1.0.0
             '-DarkTol': self.darkTol.get(),
             '-Gpu': '%(GPU)s'
         }
-        # Manage the CTF estimation:
-        # Extracted from Aretomo2 manual:
-        #   Since version 1.4.0 AreTomo2 has added a function that estimates the CTF of each tilt images This
-        #   function will be enabled when users provide pixel size, high tension, and spherical aberration Cs of the
-        #   tilt series. The following is an example of the corresponding command line parameters.
-        #
-        #   AreTomo2 ………. -PixSize 2.4 -Kv 300 -Cs 2.7
-        #
-        # Thus, parameters PixSize, Kv and Cs are involved. Since the first two are also used for the dose weighting
-        # and the third is only used for the CTF estimation, we'll add it or not to the command sent to AreTomo2
-        # depending on the user's choice regarding the estimation or not of the CTF
+
         if self.doEstimateCtf.get():
             args['-Cs'] = tsSet.getAcquisition().getSphericalAberration()
             if self.doPhaseShiftSearch.get():
-                args['-ExtPhase'] = f'{self.minPhaseShift.get()} {self.maxPhaseShift.get()}'
+                args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
 
         if not self.useInputProt:
             args['-Align'] = 0 if self.skipAlign else 1
@@ -626,14 +611,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTiltSeries.write()
             self._store(outputSetOfTiltSeries)
 
-            # Output set of CTF tomo series ----------------------------------------
-            if self.doEstimateCtf.get():
+            # Output set of CTF tomo series
+            if self.doEstimateCtf:
                 outputCtfs = self.getOutputSetOfCtfs()
 
                 newCTFTomoSeries = CTFTomoSeries()
                 newCTFTomoSeries.copyInfo(newTs)
                 newCTFTomoSeries.setTiltSeries(newTs)
-                newCTFTomoSeries.setObjId(ts.getObjId())
+                #newCTFTomoSeries.setObjId(ts.getObjId())
                 newCTFTomoSeries.setTsId(tsId)
                 outputCtfs.append(newCTFTomoSeries)
 

@@ -28,12 +28,14 @@ import numpy as np
 from pwem import ALIGN_2D
 from pyworkflow.utils import magentaStr
 from pyworkflow.tests import DataSet, setupTestProject
+
 from tomo.objects import TomoAcquisition
 from tomo.protocols import ProtImportTs
 from tomo.tests import RE4_STA_TUTO, DataSetRe4STATuto
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
-from ..protocols import ProtAreTomoAlignRecon
-from ..protocols.protocol_aretomo import OUT_TS, OUT_TOMO, OUT_TS_ALN, OUT_CTFS
+
+from ..protocols.protocol_aretomo import (ProtAreTomoAlignRecon, OUT_TS, OUT_TOMO,
+                                          OUT_TS_ALN, OUT_CTFS)
 
 
 class TestAreTomoBase(TestBaseCentralizedLayer):

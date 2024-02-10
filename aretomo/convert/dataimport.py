@@ -25,12 +25,8 @@
 # **************************************************************************
 
 import os.path
-from os.path import exists
-
 import numpy as np
 import logging
-
-from pyworkflow.utils import replaceExt
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +49,8 @@ class AretomoCtfParser:
         :param fileName: input file to be parsed
         :param output: output CTFTomoSeries
         """
-        psdFile = replaceExt(fileName, 'mrc')
-        psdFile = psdFile if exists(psdFile) else None
+        psdFile = pwutils.replaceExt(fileName, 'mrc')
+        psdFile = psdFile if os.path.exists(psdFile) else None
         ctfResult = self.readAretomoCtfOutput(fileName)
         counter = 0
 
@@ -92,7 +88,7 @@ class AretomoCtfParser:
             logger.debug(f"Invalid CTF values: {values}")
             ctfModel.setWrongDefocus()
         else:
-            # 1 micrograph number
+            # 1 - micrograph number
             # 2 - defocus 1 [A]
             # 3 - defocus 2
             # 4 - azimuth of astigmatism
@@ -101,7 +97,7 @@ class AretomoCtfParser:
             # 7 - spacing (in Angstroms) up to which CTF rings were fit successfully.
             # From a conversation with B. K. regarding the resolution value: "I think it is column #7. I believe that
             # Shawn was hesitant to call it resolution, as in his view the resolution might be higher, but it states
-            # the resolution to which the ctf fit is reliable. In the end, I believe that the indication by ctffinf
+            # the resolution to which the ctf fit is reliable. In the end, I believe that the indication by ctffind
             # is similar"
             tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, resolution = values
             ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
@@ -116,7 +112,7 @@ class AretomoCtfParser:
     def readAretomoCtfOutput(filename):
         """ Reads an Aretomo CTF file and loads it as a numpy array with the following information for each line:
         Columns:
-        #1 micrograph number
+        #1 - micrograph number
         #2 - defocus 1 [A]
         #3 - defocus 2
         #4 - azimuth of astigmatism
