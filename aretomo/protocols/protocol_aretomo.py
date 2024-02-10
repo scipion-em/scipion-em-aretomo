@@ -727,9 +727,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         return os.path.join(prefix, fileName + fileExtension)
 
     def getOutputSetOfTomograms(self) -> SetOfTomograms:
-        outputTomo = getattr(self, OUT_TOMO, None)
-        if outputTomo:
-            outputTomo.enableAppend()
+        outputSetOfTomograms = getattr(self, OUT_TOMO, None)
+        if outputSetOfTomograms:
+            outputSetOfTomograms.enableAppend()
         else:
             outputSetOfTomograms = self._createSetOfTomograms()
             outputSetOfTomograms.copyInfo(self._getSetOfTiltSeries())
@@ -737,13 +737,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{OUT_TOMO: outputSetOfTomograms})
             self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTomograms)
-        return outputTomo
+        return getattr(self, OUT_TOMO)
 
     def getOutputSetOfTiltSeries(self,
                                  outputName: Literal[OUT_TS, OUT_TS_ALN] = OUT_TS) -> SetOfTiltSeries:
-        outputTS = getattr(self, outputName, None)
-        if outputTS:
-            outputTS.enableAppend()
+        outputSetOfTiltSeries = getattr(self, outputName, None)
+        if outputSetOfTiltSeries:
+            outputSetOfTiltSeries.enableAppend()
         else:
             if outputName == OUT_TS_ALN:
                 suffix = "_interpolated"
@@ -761,7 +761,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self._defineOutputs(**{outputName: outputSetOfTiltSeries})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
                                        outputSetOfTiltSeries)
-        return outputTS
+        return outputSetOfTiltSeries
 
     def getOutputSetOfCtfs(self) -> SetOfCTFTomoSeries:
         outputCtfs = getattr(self, OUT_CTFS, None)
