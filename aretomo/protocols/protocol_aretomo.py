@@ -386,6 +386,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         }
 
         if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf.get():
+            # Manage the CTF estimation:
+            # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
+            # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
+            # doEstimateCtf flag parameter.
             args['-Cs'] = tsSet.getAcquisition().getSphericalAberration()
             if self.doPhaseShiftSearch.get():
                 args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
