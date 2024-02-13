@@ -74,7 +74,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         self.outputSOTSList_objID = []
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
-        self.noneGeneratedMsg = String()
         self.excludedViewsMsg = String()
 
         # --------------------------- DEFINE param functions ----------------------
@@ -644,7 +643,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if len(outSet) == 0:
             msg = ('All the introduced Tilt Series were not correctly aligned and/or all the corresponding '
                    'tomograms were not correctly generated.')
-            self.noneGeneratedMsg.set(msg)
             raise Exception(msg)
 
     # --------------------------- INFO functions ------------------------------
@@ -662,9 +660,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            f"{getattr(self, OUT_TS).getSize()}")
         else:
             summary.append("Output is not ready yet.")
-
-        if self.isFinished() and self.noneGeneratedMsg.get():
-            summary.append('*ERROR!*\n' + self.noneGeneratedMsg.get())
 
         if self.badTsAliMsg.get():
             summary.append('*WARNING!*' + self.badTsAliMsg.get())
