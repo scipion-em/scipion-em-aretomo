@@ -287,7 +287,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
-        form.addParallelSection(threads=3)
+        form.addParallelSection(threads=2)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
