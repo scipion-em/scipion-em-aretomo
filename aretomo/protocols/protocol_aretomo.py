@@ -622,7 +622,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 newCTFTomoSeries = CTFTomoSeries()
                 newCTFTomoSeries.copyInfo(newTs)
                 newCTFTomoSeries.setTiltSeries(newTs)
-                #newCTFTomoSeries.setObjId(ts.getObjId())
                 newCTFTomoSeries.setTsId(tsId)
                 outputCtfs.append(newCTFTomoSeries)
 
