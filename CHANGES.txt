@@ -7,6 +7,8 @@
       centralized protocol for importing CTFs.
     - Fix the origin set by Scipion to the generated tomograms.
     - Outputs are not stored in case the are not correctly generated.
+    - If dose-weighting active, the accumulated dose of the interpolated TS is set to zero  to avoid double dose
+      correction if using the interp TS for the PPPT.
   Developers:
     - Rewrite tests using the TCL from em-tomo and the reliontomo test dataset.
 3.8.3: typo bugfix

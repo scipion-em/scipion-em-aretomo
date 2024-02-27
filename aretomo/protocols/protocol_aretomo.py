@@ -34,6 +34,7 @@ import numpy as np
 import time
 from typing import List, Literal, Tuple, Union, Optional
 
+from pwem import ALIGN_NONE, ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
 from pyworkflow.object import Set, String
@@ -521,9 +522,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 newTs.setSamplingRate(self._getOutputSampling())
                 outTsAligned.append(newTs)
                 accumDose = 0.
-                trMatrix = np.eye(3)
-                t = Transform()
-                t.setMatrix(trMatrix)
 
                 excludedViewsList = []
                 for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
@@ -534,7 +532,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         acq = tiltImage.getAcquisition()
                         acq.setTiltAxisAngle(0.)
                         newTi.setAcquisition(acq)
-                        newTi.setTransform(t)
 
                         secIndex = AretomoAln.sections.index(secNum)
                         newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
@@ -542,7 +539,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                           (self.getFilePath(tsFn, extraPrefix, ".mrc")))
                         newTi.setSamplingRate(self._getOutputSampling())
                         newTs.append(newTi)
-                        accumDose = acq.getAccumDose()
+                        # If the interpolated TS was generated considering the dose weighting, it's accumulated dose
+                        # is set to 0 to avoid double dose correction if using the interp TS for the PPPT
+                        if not self.doDW.get():
+                            accumDose = acq.getAccumDose()
                     else:
                         excludedViewsList.append(secNum)
                 if excludedViewsList:
@@ -574,6 +574,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             newTs = ts.clone()
             newTs.copyInfo(ts)
             newTs.setSamplingRate(self._getInputSampling())
+            newTs.setAlignment2D()
             outputSetOfTiltSeries.append(newTs)
 
             for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
@@ -743,18 +744,26 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if outputSetOfTiltSeries:
             outputSetOfTiltSeries.enableAppend()
         else:
-            if outputName == OUT_TS_ALN:
-                suffix = "_interpolated"
-                pixSize = self._getOutputSampling()
-            else:
-                suffix = ""
-                pixSize = self._getInputSampling()
-
+            suffix = "_interpolated" if outputName == OUT_TS_ALN else ""
             outputSetOfTiltSeries = self._createSetOfTiltSeries(suffix=suffix)
             outputSetOfTiltSeries.copyInfo(self._getSetOfTiltSeries())
+            acq = outputSetOfTiltSeries.getAcquisition()
+            if outputName == OUT_TS_ALN:
+                pixSize = self._getOutputSampling()
+                alignment = ALIGN_NONE
+                if self.doDW.get():
+                    acq.setAccumDose(0.)
+                    acq.setDosePerFrame(0.)
+                    acq.setTiltAxisAngle(0.)
+                    outputSetOfTiltSeries.setAcquisition(acq)
+            else:
+                pixSize = self._getInputSampling()
+                alignment = ALIGN_2D
+
             # Dimensions will be updated later
             outputSetOfTiltSeries.setDim(self._getSetOfTiltSeries().getDim())
             outputSetOfTiltSeries.setSamplingRate(pixSize)
+            outputSetOfTiltSeries.setAlignment(alignment)
             outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{outputName: outputSetOfTiltSeries})
             self._defineSourceRelation(self.inputSetOfTiltSeries,
