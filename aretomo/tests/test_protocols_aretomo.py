@@ -68,25 +68,23 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
             TS_54: 41
         }
         # Acquisition common parameters
+        dosePerTiltImg = DataSetRe4STATuto.dosePerTiltImgWithTltFile.value
         testAcq = TomoAcquisition(voltage=DataSetRe4STATuto.voltage.value,
                                   sphericalAberration=DataSetRe4STATuto.sphericalAb.value,
                                   amplitudeContrast=DataSetRe4STATuto.amplitudeContrast.value,
                                   magnification=DataSetRe4STATuto.magnification.value,
                                   doseInitial=DataSetRe4STATuto.initialDose.value,
-                                  dosePerFrame=DataSetRe4STATuto.dosePerTiltImg.value,
+                                  dosePerFrame=dosePerTiltImg,
                                   angleMax=60,
                                   step=3)
         # Acquisition of TS_03
-        dosePerTiltImg = DataSetRe4STATuto.dosePerTiltImg.value
         testAcq03 = testAcq.clone()
         testAcq03.setAngleMin(-57)
-        testAcq03.setAccumDose(dosePerTiltImg * (cls.nAnglesDict[TS_03] - 1))
-        # testAcq03.setTiltAxisAngle(85.13)  # Refined value given by Aretomo
+        testAcq03.setAccumDose(dosePerTiltImg * cls.nAnglesDict[TS_03])
         # Acquisition of TS_54
         testAcq54 = testAcq.clone()
         testAcq54.setAngleMin(-60)
-        testAcq54.setAccumDose(dosePerTiltImg * (cls.nAnglesDict[TS_54] - 1))
-        # testAcq54.setTiltAxisAngle(85.3)  # Refined value given by Aretomo
+        testAcq54.setAccumDose(dosePerTiltImg * cls.nAnglesDict[TS_54])
         # Tilt series acq dict
         cls.tsAcqDict = {
             TS_03: testAcq03,
@@ -133,7 +131,7 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
                                        amplitudeContrast=DataSetRe4STATuto.amplitudeContrast.value,
                                        samplingRate=DataSetRe4STATuto.unbinnedPixSize.value,
                                        doseInitial=DataSetRe4STATuto.initialDose.value,
-                                       dosePerFrame=DataSetRe4STATuto.dosePerTiltImg.value,
+                                       dosePerFrame=DataSetRe4STATuto.dosePerTiltImgWithTltFile.value,
                                        tiltAxisAngle=DataSetRe4STATuto.tiltAxisAngle.value)
 
         cls.launchProtocol(protTsImport)
@@ -215,6 +213,11 @@ class TestAreTomo(TestAreTomoBase):
         tsAcqDict = self.tsAcqDict
         tsAcqDict[TS_03].setTiltAxisAngle(84.9)
         tsAcqDict[TS_54].setTiltAxisAngle(85.19)
+        # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
+        # accumulated values will be updated in the interpolated TS
+        tsAcqDictInterp = self.tsAcqInterpDict
+        tsAcqDictInterp[TS_03].setAccumDose(96)
+        tsAcqDictInterp[TS_54].setAccumDose(111)
 
         # Run the protocol
         prot = self.newProtocol(ProtAreTomoAlignRecon,
@@ -244,7 +247,7 @@ class TestAreTomo(TestAreTomoBase):
                              expectedSRate=self.unbinnedSRate * self.binFactor,
                              # Protocol sets the bin factor to 2 by default
                              expectedDimensions=expectedDimsTsInterp,
-                             testAcqObj=self.tsAcqInterpDict,
+                             testAcqObj=tsAcqDictInterp,
                              anglesCount=nAnglesDict,
                              isInterpolated=True)
         # CTFs
