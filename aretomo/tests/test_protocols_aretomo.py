@@ -28,8 +28,6 @@ import numpy as np
 from pwem import ALIGN_2D
 from pyworkflow.utils import magentaStr
 from pyworkflow.tests import DataSet, setupTestProject
-
-from tomo.objects import TomoAcquisition
 from tomo.protocols import ProtImportTs
 from tomo.tests import RE4_STA_TUTO, DataSetRe4STATuto
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
@@ -42,18 +40,16 @@ TS_03 = 'TS_03'
 
 
 class TestAreTomoBase(TestBaseCentralizedLayer):
-    nAnglesDict = None
     ds = None
     importedTs = None
-    particlesUnbinnedBoxSize = 256
-    particlesExtractedBoxSize = 64
-    alignZ = 900
-    nTiltSeries = 2
-    binFactor = 4
     unbinnedSRate = DataSetRe4STATuto.unbinnedPixSize.value
+    nAnglesDict = DataSetRe4STATuto.nAnglesDict.value
+    nTiltSeries = len(nAnglesDict)
+    expectedDimsTs = DataSetRe4STATuto.dimsTsBin1Dict.value
+    tsAcqDict = DataSetRe4STATuto.tsAcqDict.value
+    alignZ = 900
+    binFactor = 4
     unbinnedThk = 1200
-    expectedDimsTs = {TS_03: [3710, 3838, 40],
-                      TS_54: [3710, 3838, 41]}
     expectedTomoDims = [958, 926, 300]
 
     @classmethod
@@ -62,54 +58,16 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
         cls.ds = DataSet.getDataSet(RE4_STA_TUTO)
         cls.expectedOriginShifts = list(np.array(cls.expectedTomoDims) / -2 * cls.unbinnedSRate * cls.binFactor)
         cls.inTsSet = cls._runImportTs()
-        # Angles count dict
-        cls.nAnglesDict = {
-            TS_03: 40,
-            TS_54: 41
-        }
-        # Acquisition common parameters
-        dosePerTiltImg = DataSetRe4STATuto.dosePerTiltImgWithTltFile.value
-        testAcq = TomoAcquisition(voltage=DataSetRe4STATuto.voltage.value,
-                                  sphericalAberration=DataSetRe4STATuto.sphericalAb.value,
-                                  amplitudeContrast=DataSetRe4STATuto.amplitudeContrast.value,
-                                  magnification=DataSetRe4STATuto.magnification.value,
-                                  doseInitial=DataSetRe4STATuto.initialDose.value,
-                                  dosePerFrame=dosePerTiltImg,
-                                  angleMax=60,
-                                  step=3)
-        # Acquisition of TS_03
-        testAcq03 = testAcq.clone()
-        testAcq03.setAngleMin(-57)
-        testAcq03.setAccumDose(dosePerTiltImg * cls.nAnglesDict[TS_03])
-        # Acquisition of TS_54
-        testAcq54 = testAcq.clone()
-        testAcq54.setAngleMin(-60)
-        testAcq54.setAccumDose(dosePerTiltImg * cls.nAnglesDict[TS_54])
-        # Tilt series acq dict
-        cls.tsAcqDict = {
-            TS_03: testAcq03,
-            TS_54: testAcq54
-        }
+
         # Acquisition of the interpolated TS: aretomo allows to dose-weight the TS, so if the interpolated TS is
         # generated and the dose-weight option is active, then the dose is set to 0 to avoid double dose correction
         # if using the interpolated TS for the PPPT. Also, the tilt axis angle should be 0 as the tilt series is
         # aligned
-        # Acquisition of TS_03 interpolated
-        testAcq03Interp = testAcq03.clone()
-        testAcq03Interp.setTiltAxisAngle(0)
-        # Acquisition of TS_54 interpolated
-        testAcq54Interp = testAcq54.clone()
-        testAcq54Interp.setTiltAxisAngle(0)
-        # Tilt series interpolated acq dict
-        cls.tsAcqInterpDict = {
-            TS_03: testAcq03Interp,
-            TS_54: testAcq54Interp
-        }
         # Acquisition of TS_03 interpolated with DW
-        testAcq03InterpDw = testAcq03Interp.clone()
+        testAcq03InterpDw = DataSetRe4STATuto.testAcq03Interp.value.clone()
         testAcq03InterpDw.setAccumDose(0)
         # Acquisition of TS_54 interpolated with DW
-        testAcq54InterpDw = testAcq54Interp.clone()
+        testAcq54InterpDw = DataSetRe4STATuto.testAcq54Interp.value.clone()
         testAcq54InterpDw.setAccumDose(0)
         # Tilt series interpolated acq dict wih DW
         cls.tsAcqInterpDwDict = {
@@ -152,8 +110,7 @@ class TestAreTomo(TestAreTomoBase):
         # Expected values
         expectedDimsTsInterp = {TS_03: [958, 926, 40],
                                 TS_54: [958, 926, 41]}
-        nAnglesDict = {TS_03: 40,
-                       TS_54: 41}
+
         # Update the corresponding acquisition dictionary with the refined tilt axis angle values
         tsAcqDict = self.tsAcqDict
         tsAcqDict[TS_03].setTiltAxisAngle(85.13)
@@ -188,7 +145,7 @@ class TestAreTomo(TestAreTomoBase):
                              # Protocol sets the bin factor to 2 by default
                              expectedDimensions=expectedDimsTsInterp,
                              testAcqObj=self.tsAcqInterpDwDict,
-                             anglesCount=nAnglesDict,
+                             anglesCount=self.nAnglesDict,
                              isInterpolated=True)
         # CTFs
         self.assertIsNone(getattr(prot, OUT_CTFS, None))
@@ -215,7 +172,7 @@ class TestAreTomo(TestAreTomoBase):
         tsAcqDict[TS_54].setTiltAxisAngle(85.19)
         # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
         # accumulated values will be updated in the interpolated TS
-        tsAcqDictInterp = self.tsAcqInterpDict
+        tsAcqDictInterp = DataSetRe4STATuto.tsAcqInterpDict.value
         tsAcqDictInterp[TS_03].setAccumDose(96)
         tsAcqDictInterp[TS_54].setAccumDose(111)
 
