@@ -70,6 +70,7 @@ class AretomoCtfParser:
             if not ti.isEnabled():
                 newCtfTomo.setEnabled(False)
             newCtfTomo.setIndex(i + 1)
+            newCtfTomo.setAcquisitionOrder(ti.getAcquisitionOrder())
             output.append(newCtfTomo)
 
     @staticmethod
