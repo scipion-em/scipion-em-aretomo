@@ -1,6 +1,7 @@
 3.9.1:
   Developers: the tests now use the Test Centralization Layer update and expansion of the used test set definition
   from em-tomo v3.6.0.
+  Users: add aretomo2 1.1.2
 3.9.0:
   Users:
     - The protocol form now present CTF-related parameters, to choose if estimate it or
