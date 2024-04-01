@@ -52,7 +52,6 @@ from ..convert.convert import getTransformationMatrix, readAlnFile
 from ..convert.dataimport import AretomoCtfParser
 from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES, V1_3_4
 
-
 OUT_TS = "TiltSeries"
 OUT_TS_ALN = "InterpolatedTiltSeries"
 OUT_TOMO = "Tomograms"
@@ -465,7 +464,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
             if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
                 msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
-                self.info(msg + ' Skipping...')
+                self.warning(msg + ' Skipping...')
                 outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
                 self.badTsAliMsg.set(outMsg)
                 self._store(self.badTsAliMsg)
@@ -495,7 +494,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             tomoDims = self._getOutputDim(tomoFileName)
             if np.any(np.array(tomoDims) == len(ts)):
                 msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
-                self.info('Tilt series skipped because of a bad reconstruction. ' + msg)
+                self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
                 outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
                 self.badTomoRecMsg.set(outMsg)
                 self._store(self.badTomoRecMsg)
@@ -533,7 +532,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         acqTi = tiltImage.getAcquisition()
                         acqTi.setTiltAxisAngle(0.)
 
-
                         secIndex = AretomoAln.sections.index(secNum)
                         newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
                         newTi.setLocation(secIndex + 1,
@@ -551,11 +549,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                             accumDoseList.append(acqTi.getAccumDose())
 
                     else:
-                        excludedViewsList.append(secNum)
+                        excludedViewsList.append(secNum + 1)
                 if excludedViewsList:
                     newTs.setAnglesCount(len(newTs))
                     prevMsg = self.excludedViewsMsg.get() if self.excludedViewsMsg.get() else ''
-                    self.excludedViewsMsg.set(prevMsg + f'\n{tsId}: {excludedViewsList}')
+                    newMsg = f'\n{tsId}: {excludedViewsList}'
+                    self.warning('Some views were excluded:' + prevMsg)
+                    self.excludedViewsMsg.set(prevMsg + newMsg)
                     self._store(self.excludedViewsMsg)
 
                 acq = newTs.getAcquisition()
