@@ -1,9 +1,11 @@
 3.9.1:
+  Users:
+   - Add aretomo2 1.1.2
+   - Fix backwards compatibility.
   Developers:
    - The tests now use the Test Centralization Layer update and expansion of the used test set definition
      from em-tomo v3.6.0.
    - Update the acquisition order in the CTFTomo objects (field added to that class in scipion-em-tomo v3.7.0).
-  Users: add aretomo2 1.1.2
 3.9.0:
   Users:
     - The protocol form now present CTF-related parameters, to choose if estimate it or

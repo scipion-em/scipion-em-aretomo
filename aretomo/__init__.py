@@ -51,8 +51,14 @@ class Plugin(pwem.Plugin):
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB,
                                            default="11.8")
-        cls._defineVar(ARETOMO_BIN,
-                       f'AreTomo2_{V1_1_2}_Cuda{cudaVersion.major}{cudaVersion.minor}')
+
+        if cls.getVar(ARETOMO_HOME).endswith(V1_3_4):
+            binaryName = f'AreTomo_{V1_3_4}_Cuda{cudaVersion.major}{cudaVersion.minor}_Feb22_2023'
+        else:
+            binaryStr = V1_0_0 if cls.getVar(ARETOMO_HOME).endswith(V1_0_0) else V1_1_2
+            binaryName = f'AreTomo2_{binaryStr}_Cuda{cudaVersion.major}{cudaVersion.minor}'
+
+        cls._defineVar(ARETOMO_BIN, binaryName)
 
     @classmethod
     def getEnviron(cls):
