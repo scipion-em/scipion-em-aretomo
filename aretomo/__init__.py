@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.9.0'
+__version__ = '3.9.1'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -40,18 +40,25 @@ _references = ['Zheng2022']
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
-    _supportedVersions = [V1_0_0, V1_3_4]
+    _supportedVersions = [V1_0_0, V1_1_2, V1_3_4]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_0_0}')
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_2}')
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
 
         # Define the variable default value based on the guessed cuda version
-        cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB)
-        cls._defineVar(ARETOMO_BIN,
-                       f'AreTomo2_{V1_0_0}_Cuda{cudaVersion.major}{cudaVersion.minor}')
+        cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB,
+                                           default="11.8")
+
+        if cls.getVar(ARETOMO_HOME).endswith(V1_3_4):
+            binaryName = f'AreTomo_{V1_3_4}_Cuda{cudaVersion.major}{cudaVersion.minor}_Feb22_2023'
+        else:
+            binaryStr = V1_0_0 if cls.getVar(ARETOMO_HOME).endswith(V1_0_0) else V1_1_2
+            binaryName = f'AreTomo2_{binaryStr}_Cuda{cudaVersion.major}{cudaVersion.minor}'
+
+        cls._defineVar(ARETOMO_BIN, binaryName)
 
     @classmethod
     def getEnviron(cls):
@@ -85,8 +92,10 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('aretomo2', version=V1_0_0,
-                       tar=f"aretomo2-{V1_0_0}.tgz",
-                       default=True)
+        for v in [V1_0_0, V1_1_2]:
+            env.addPackage('aretomo2', version=v,
+                           tar=f"aretomo2-{v}.tgz",
+                           default=v == V1_1_2)
+
         env.addPackage('aretomo', version=V1_3_4,
                        tar=f"aretomo_v{V1_3_4}.tgz")
