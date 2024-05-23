@@ -133,7 +133,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'Z height should be always smaller than tomogram '
                            'thickness and should be close to the sample '
                            'thickness.')
-
+        
+        form.addParam('alignZfile', params.FileParam,
+                      expertLevel=params.LEVEL_ADVANCED,
+                      condition='not skipAlign and not useInputProt',
+                      important=True,
+                      label='File with volume height for alignment per tilt-series',
+                      help='Specifies a text file containing the Z height (*unbinned*) '
+                           'to be used for alignment for individual tomograms. '
+                           'The file should have two columns, the first '
+                           'containing the tsId and the second containing the AlignZ value '
+                           'for that tilt series. You can specify one tilt-series '
+                           'per line.')
+        
         form.addParam('tomoThickness', params.IntParam,
                       condition='makeTomo', important=True,
                       default=1200, label='Tomogram thickness unbinned (voxels)',
@@ -346,6 +358,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
         self._generateTltFile(ts, angleFilePath)
 
+        if not self.skipAlign:
+            alignZfile = self.alignZfile.get()
+            if alignZfile:
+                self.perTsAlignZ = self.readThicknessFile(alignZfile)
+                print('HERE2!')
+
         if self.useInputProt:
             # Find and copy aln file
             protExtra = self.inputProt.get()._getExtraPath(tsId)
@@ -404,8 +422,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             args['-TiltAxis'] = f"{tiltAxisAngle} {self.refineTiltAxis.get() - 1}"
             args['-TiltCor'] = self.refineTiltAngles.get() - 1
 
-            if not self.skipAlign:
+            if self.alignZfile.get():
+                # Check if we have AlignZ information per tilt-series:
+                if tsId in self.perTsAlignZ:
+                    args['-AlignZ'] = self.perTsAlignZ[tsId]
+                else:
+                    # Maybe this one TS is not present in the file, so we use the default AlignZ:
+                    args['-AlignZ'] = self.alignZ
+            else:
                 args['-AlignZ'] = self.alignZ
+            
 
             if self.sampleType.get() == LOCAL_MOTION_COORDS:
                 args['-RoiFile'] = self.coordsFn
@@ -729,6 +755,22 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         except AttributeError:  # There is no outputSetOfTiltSeries
             pass
+
+    def readThicknessFile( self, filePath ):
+    # Reads a text file with thickness information per tilt-series
+    # 
+    # Example of how the file should look like:
+    # Position_112 700
+    # Position_35  650
+    # Position_18  500
+    # Position_114 1000
+
+        thickPerTs = {}
+        with open(filePath) as file:
+            for line in file:
+                lineParsed = line.split()
+                thickPerTs[lineParsed[0]] = int(lineParsed[1])
+        return thickPerTs
 
     def getFilePath(self,
                     tsFn: Union[str, os.PathLike],
