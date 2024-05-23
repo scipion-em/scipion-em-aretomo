@@ -129,15 +129,6 @@ class TestAreTomo(TestAreTomoBase):
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
-        # Tilt series
-        self.checkTiltSeries(getattr(prot, OUT_TS, None),
-                             expectedSetSize=self.nTiltSeries,
-                             expectedSRate=self.unbinnedSRate,
-                             expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=tsAcqDict,
-                             hasAlignment=True,
-                             alignment=ALIGN_2D,
-                             anglesCount=self.nAnglesDict)
         # Interpolated TS
         self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
                              expectedSetSize=self.nTiltSeries,
@@ -187,17 +178,6 @@ class TestAreTomo(TestAreTomoBase):
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
-        # Tilt series
-        self.checkTiltSeries(getattr(prot, OUT_TS, None),
-                             expectedSetSize=self.nTiltSeries,
-                             expectedSRate=self.unbinnedSRate,
-                             expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=tsAcqDict,
-                             hasAlignment=True,
-                             alignment=ALIGN_2D,
-                             anglesCount=self.nAnglesDict,
-                             excludedViewsDict=exludedViews)
-
         # Interpolated TS
         self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
                              expectedSetSize=self.nTiltSeries,
@@ -234,15 +214,14 @@ class TestAreTomo(TestAreTomoBase):
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
-        # Tilt series
+        # Interpolated Tilt series
         self.checkTiltSeries(getattr(prot, OUT_TS, None),
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
-                             expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=tsAcqDict,
-                             hasAlignment=True,
-                             alignment=ALIGN_2D,
-                             anglesCount=self.nAnglesDict)
+                             expectedDimensions=self.expectedDimsTsInterp,
+                             testAcqObj=tsAcqDictInterp,
+                             anglesCount=self.nAnglesDict,
+                             isInterpolated=True)
 
         # CTFs
         self._checkCTFs(getattr(prot, OUT_CTFS, None))

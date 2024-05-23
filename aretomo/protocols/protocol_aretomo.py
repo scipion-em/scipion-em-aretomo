@@ -435,7 +435,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         ts = self._getSetOfTiltSeries()[tsObjId]
         extraPrefix = self._getExtraPath(tsId)
 
-        if not (self.makeTomo and self.skipAlign):
+        if not self.skipAlign:
             AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"))
             # We found the following behavior to be happening sometimes (non-systematically):
             # It can be observed that the tilt angles are badly set for the non-excluded views:
@@ -470,7 +470,88 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self._store(self.badTsAliMsg)
                 return
 
-            alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
+            # Create new set of aligned TS with potentially fewer tilts included
+            outTsAligned = self.getOutputSetOfTiltSeries(OUT_TS_ALN)
+            newTs = TiltSeries(tsId=tsId)
+            newTs.copyInfo(ts)
+            newTs.setSamplingRate(self._getOutputSampling())
+            outTsAligned.append(newTs)
+
+            excludedViewsList = []
+            accumDoseList = []
+            initialDoseList = []
+            for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
+                if secNum in AretomoAln.sections:
+                    newTi = TiltImage()
+                    newTi.copyInfo(tiltImage, copyId=False, copyTM=False)
+
+                    acqTi = tiltImage.getAcquisition()
+                    acqTi.setTiltAxisAngle(0.)
+
+                    secIndex = AretomoAln.sections.index(secNum)
+                    newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
+                    newTi.setLocation(secIndex + 1,
+                                      (self.getFilePath(tsFn, extraPrefix, ".mrc")))
+                    newTi.setSamplingRate(self._getOutputSampling())
+                    newTs.append(newTi)
+                    # If the interpolated TS was generated considering the dose weighting, it's accumulated dose
+                    # is set to 0 to avoid double dose correction if using the interp TS for the PPPT
+                    if self.doDW.get():
+                        acqTi.setDoseInitial(0.)
+                        acqTi.setAccumDose(0.)
+                        newTi.setAcquisition(acqTi)
+                    else:
+                        initialDoseList.append(acqTi.getDoseInitial())
+                        accumDoseList.append(acqTi.getAccumDose())
+
+                else:
+                    excludedViewsList.append(secNum + 1)
+            if excludedViewsList:
+                newTs.setAnglesCount(len(newTs))
+                prevMsg = self.excludedViewsMsg.get() if self.excludedViewsMsg.get() else ''
+                newMsg = f'\n{tsId}: {excludedViewsList}'
+                self.warning('Some views were excluded:' + prevMsg)
+                self.excludedViewsMsg.set(prevMsg + newMsg)
+                self._store(self.excludedViewsMsg)
+
+            acq = newTs.getAcquisition()
+            if self.doDW.get():
+                acq.setDoseInitial(0.)
+                acq.setAccumDose(0.)
+            else:
+                # The interp TS initial and accumulated dose values may need to be updated in the interpolated TS
+                # if DW is not applied and there are excluded views
+                acq.setAccumDose(max(accumDoseList))
+                acq.setDoseInitial(min(initialDoseList))
+            acq.setTiltAxisAngle(0.)  # 0 because TS is aligned
+            newTs.setAcquisition(acq)
+
+            dims = self._getOutputDim(newTi.getFileName())
+            newTs.setInterpolated(True)
+            newTs.setDim(dims)
+            newTs.write(properties=False)
+
+            outTsAligned.update(newTs)
+            outTsAligned.write()
+            self._store(outTsAligned)
+
+            # Output set of CTF tomo series
+            if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf:
+                outputCtfs = self.getOutputSetOfCtfs()
+
+                newCTFTomoSeries = CTFTomoSeries()
+                newCTFTomoSeries.copyInfo(newTs)
+                newCTFTomoSeries.setTiltSeries(newTs)
+                newCTFTomoSeries.setTsId(tsId)
+                outputCtfs.append(newCTFTomoSeries)
+
+                outputFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
+                ap = AretomoCtfParser(self)
+                ap.parseTSDefocusFile(newTs, outputFile, newCTFTomoSeries)
+
+                outputCtfs.update(newCTFTomoSeries)
+                outputCtfs.write()
+                self._store(outputCtfs)
 
         if self.makeTomo:
             # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
@@ -512,142 +593,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTomograms.update(newTomogram)
             outputSetOfTomograms.write()
             self._store(outputSetOfTomograms)
-        else:
-            if self._saveInterpolated():
-                # Create new set of aligned TS with potentially fewer tilts included
-                outTsAligned = self.getOutputSetOfTiltSeries(OUT_TS_ALN)
-                newTs = TiltSeries(tsId=tsId)
-                newTs.copyInfo(ts)
-                newTs.setSamplingRate(self._getOutputSampling())
-                outTsAligned.append(newTs)
 
-                excludedViewsList = []
-                accumDoseList = []
-                initialDoseList = []
-                for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
-                    if secNum in AretomoAln.sections:
-                        newTi = TiltImage()
-                        newTi.copyInfo(tiltImage, copyId=False, copyTM=False)
-
-                        acqTi = tiltImage.getAcquisition()
-                        acqTi.setTiltAxisAngle(0.)
-
-                        secIndex = AretomoAln.sections.index(secNum)
-                        newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
-                        newTi.setLocation(secIndex + 1,
-                                          (self.getFilePath(tsFn, extraPrefix, ".mrc")))
-                        newTi.setSamplingRate(self._getOutputSampling())
-                        newTs.append(newTi)
-                        # If the interpolated TS was generated considering the dose weighting, it's accumulated dose
-                        # is set to 0 to avoid double dose correction if using the interp TS for the PPPT
-                        if self.doDW.get():
-                            acqTi.setDoseInitial(0.)
-                            acqTi.setAccumDose(0.)
-                            newTi.setAcquisition(acqTi)
-                        else:
-                            initialDoseList.append(acqTi.getDoseInitial())
-                            accumDoseList.append(acqTi.getAccumDose())
-
-                    else:
-                        excludedViewsList.append(secNum + 1)
-                if excludedViewsList:
-                    newTs.setAnglesCount(len(newTs))
-                    prevMsg = self.excludedViewsMsg.get() if self.excludedViewsMsg.get() else ''
-                    newMsg = f'\n{tsId}: {excludedViewsList}'
-                    self.warning('Some views were excluded:' + prevMsg)
-                    self.excludedViewsMsg.set(prevMsg + newMsg)
-                    self._store(self.excludedViewsMsg)
-
-                acq = newTs.getAcquisition()
-                if self.doDW.get():
-                    acq.setDoseInitial(0.)
-                    acq.setAccumDose(0.)
-                else:
-                    # The interp TS initial and accumulated dose values may need to be updated in the interpolated TS
-                    # if DW is not applied and there are excluded views
-                    acq.setAccumDose(max(accumDoseList))
-                    acq.setDoseInitial(min(initialDoseList))
-                acq.setTiltAxisAngle(0.)  # 0 because TS is aligned
-                newTs.setAcquisition(acq)
-
-                dims = self._getOutputDim(newTi.getFileName())
-                newTs.setInterpolated(True)
-                newTs.setDim(dims)
-                newTs.write(properties=False)
-
-                outTsAligned.update(newTs)
-                outTsAligned.write()
-                self._store(outTsAligned)
-            else:
-                # remove aligned stack from output
-                pwutils.cleanPath(self.getFilePath(tsFn, extraPrefix, ".mrc"))
-
-        # Save original TS stack with new alignment,
-        # unless making a tomo from pre-aligned TS
-        if not (self.makeTomo and self.skipAlign):
-            outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
-            newTs = ts.clone()
-            newTs.copyInfo(ts)
-            newTs.setSamplingRate(self._getInputSampling())
-            newTs.setAlignment2D()
-            outputSetOfTiltSeries.append(newTs)
-
-            for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
-                newTi = tiltImage.clone()
-                newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
-                transform = Transform()
-
-                if secNum not in AretomoAln.sections:
-                    newTi.setEnabled(False)
-                    transform.setMatrix(np.identity(3))
-                else:
-                    # set the tilt angles
-                    secIndex = AretomoAln.sections.index(secNum)
-                    acq = tiltImage.getAcquisition()
-                    newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
-                    acq.setTiltAxisAngle(AretomoAln.tilt_axes[secIndex])
-                    newTi.setAcquisition(acq)
-
-                    # set Transform
-                    m = alignmentMatrix[:, :, secIndex]
-                    self.debug(
-                        f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
-                        f"{AretomoAln.tilt_angles[secIndex]}")
-                    transform.setMatrix(m)
-
-                newTi.setTransform(transform)
-                newTi.setSamplingRate(self._getInputSampling())
-                newTs.append(newTi)
-
-            # update tilt axis angle for TS with the first value only
-            acq = newTs.getAcquisition()
-            acq.setTiltAxisAngle(AretomoAln.tilt_axes[0])
-            newTs.setAcquisition(acq)
-
-            newTs.setDim(self._getSetOfTiltSeries().getDim())
-            newTs.write(properties=False)
-
-            outputSetOfTiltSeries.update(newTs)
-            outputSetOfTiltSeries.write()
-            self._store(outputSetOfTiltSeries)
-
-            # Output set of CTF tomo series
-            if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf:
-                outputCtfs = self.getOutputSetOfCtfs()
-
-                newCTFTomoSeries = CTFTomoSeries()
-                newCTFTomoSeries.copyInfo(newTs)
-                newCTFTomoSeries.setTiltSeries(newTs)
-                newCTFTomoSeries.setTsId(tsId)
-                outputCtfs.append(newCTFTomoSeries)
-
-                outputFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
-                ap = AretomoCtfParser(self)
-                ap.parseTSDefocusFile(newTs, outputFile, newCTFTomoSeries)
-
-                outputCtfs.update(newCTFTomoSeries)
-                outputCtfs.write()
-                self._store(outputCtfs)
 
     def _closeOutputSet(self):
         super()._closeOutputSet()
