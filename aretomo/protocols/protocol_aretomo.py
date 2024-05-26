@@ -137,13 +137,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addParam('alignZfile', params.FileParam,
                       expertLevel=params.LEVEL_ADVANCED,
                       condition='not skipAlign and not useInputProt',
-                      important=True,
                       label='File with volume height for alignment per tilt-series',
                       help='Specifies a text file containing the Z height (*unbinned*) '
-                           'to be used for alignment for individual tomograms. '
+                           'to be used for alignment of individual tilt-series. '
                            'The file should have two columns, the first '
                            'containing the tsId and the second containing the AlignZ value '
-                           'for that tilt series. You can specify one tilt-series '
+                           'for that tilt-series. You can specify one tilt-series '
                            'per line.')
         
         form.addParam('tomoThickness', params.IntParam,
@@ -299,7 +298,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
-        form.addParallelSection(threads=2)
+        form.addParallelSection(threads=2, mpi=0)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -358,11 +357,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
         self._generateTltFile(ts, angleFilePath)
 
-        if not self.skipAlign:
+        if not self.skipAlign and self.alignZfile.hasValue():
             alignZfile = self.alignZfile.get()
-            if alignZfile:
+            if os.path.exists(alignZfile):
                 self.perTsAlignZ = self.readThicknessFile(alignZfile)
-                print('HERE2!')
 
         if self.useInputProt:
             # Find and copy aln file
@@ -423,15 +421,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             args['-TiltCor'] = self.refineTiltAngles.get() - 1
 
             if self.alignZfile.get():
-                # Check if we have AlignZ information per tilt-series:
-                if tsId in self.perTsAlignZ:
-                    args['-AlignZ'] = self.perTsAlignZ[tsId]
-                else:
-                    # Maybe this one TS is not present in the file, so we use the default AlignZ:
-                    args['-AlignZ'] = self.alignZ
+                # Check if we have AlignZ information per tilt-series
+                args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
             else:
                 args['-AlignZ'] = self.alignZ
-            
 
             if self.sampleType.get() == LOCAL_MOTION_COORDS:
                 args['-RoiFile'] = self.coordsFn
@@ -756,20 +749,23 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except AttributeError:  # There is no outputSetOfTiltSeries
             pass
 
-    def readThicknessFile( self, filePath ):
-    # Reads a text file with thickness information per tilt-series
-    # 
-    # Example of how the file should look like:
-    # Position_112 700
-    # Position_35  650
-    # Position_18  500
-    # Position_114 1000
-
+    def readThicknessFile(self, filePath: os.PathLike):
+        """ Reads a text file with thickness information per tilt-series.
+        Example of how the file should look like:
+        Position_112 700
+        Position_35  650
+        Position_18  500
+        Position_114 1000
+        """
         thickPerTs = {}
-        with open(filePath) as file:
-            for line in file:
-                lineParsed = line.split()
-                thickPerTs[lineParsed[0]] = int(lineParsed[1])
+        with open(filePath, "r") as f:
+            lines = f.readlines()
+            lines = filter(lambda x: x.strip(), lines)
+
+            for line in lines:
+                values = line.split()
+                thickPerTs[values[0]] = values[1]
+
         return thickPerTs
 
     def getFilePath(self,
