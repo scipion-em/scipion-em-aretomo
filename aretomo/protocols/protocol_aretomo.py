@@ -400,6 +400,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-Gpu': '%(GPU)s'
         }
 
+        if Plugin.getActiveVersion() != V1_3_4 and self.doDW:
+            args['-ImgDose'] = tsSet.getAcquisition().getDosePerFrame()
+
         if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf.get():
             # Manage the CTF estimation:
             # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
@@ -854,15 +857,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                          outputFn: os.PathLike) -> None:
         """ Generate .tlt file with tilt angles and accumulated dose. """
         angleList = []
+        aretomo2 = Plugin.getActiveVersion() != V1_3_4
 
         for ti in ts.iterItems(orderBy="_index"):
+            acqOrder = ti.getAcquisitionOrder()
             accDose = ti.getAcquisition().getAccumDose()
             tAngle = ti.getTiltAngle()
-            angleList.append((tAngle, accDose))
+            angleList.append((tAngle, acqOrder if aretomo2 else accDose))
 
         with open(outputFn, 'w') as f:
             if self.doDW:
-                f.writelines(f"{i[0]:0.3f} {i[1]:0.3f}\n" for i in angleList)
+                f.writelines(f"{i[0]:0.3f} {i[1]}\n" for i in angleList)
             else:
                 f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 

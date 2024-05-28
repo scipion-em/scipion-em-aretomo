@@ -3,6 +3,7 @@
    - Add aretomo2 1.1.2
    - Fix backwards compatibility.
    - Add an option to specify AlignZ per TS.
+   - fix dose weighting bug related to the tilt angle file (aretomo2 only)
   Developers:
    - The tests now use the Test Centralization Layer update and expansion of the used test set definition
      from em-tomo v3.6.0.
