@@ -133,7 +133,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'Z height should be always smaller than tomogram '
                            'thickness and should be close to the sample '
                            'thickness.')
-
+        
+        form.addParam('alignZfile', params.FileParam,
+                      expertLevel=params.LEVEL_ADVANCED,
+                      condition='not skipAlign and not useInputProt',
+                      label='File with volume height for alignment per tilt-series',
+                      help='Specifies a text file containing the Z height (*unbinned*) '
+                           'to be used for alignment of individual tilt-series. '
+                           'The file should have two columns, the first '
+                           'containing the tsId and the second containing the AlignZ value '
+                           'for that tilt-series. You can specify one tilt-series '
+                           'per line.')
+        
         form.addParam('tomoThickness', params.IntParam,
                       condition='makeTomo', important=True,
                       default=1200, label='Tomogram thickness unbinned (voxels)',
@@ -287,7 +298,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addHidden(params.GPU_LIST, params.StringParam,
                        default='0', label="Choose GPU IDs")
 
-        form.addParallelSection(threads=2)
+        form.addParallelSection(threads=2, mpi=0)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -346,6 +357,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
         self._generateTltFile(ts, angleFilePath)
 
+        if not self.skipAlign and self.alignZfile.hasValue():
+            alignZfile = self.alignZfile.get()
+            if os.path.exists(alignZfile):
+                self.perTsAlignZ = self.readThicknessFile(alignZfile)
+
         if self.useInputProt:
             # Find and copy aln file
             protExtra = self.inputProt.get()._getExtraPath(tsId)
@@ -384,6 +400,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-Gpu': '%(GPU)s'
         }
 
+        if Plugin.getActiveVersion() != V1_3_4 and self.doDW:
+            args['-ImgDose'] = tsSet.getAcquisition().getDosePerFrame()
+
         if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf.get():
             # Manage the CTF estimation:
             # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
@@ -404,7 +423,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             args['-TiltAxis'] = f"{tiltAxisAngle} {self.refineTiltAxis.get() - 1}"
             args['-TiltCor'] = self.refineTiltAngles.get() - 1
 
-            if not self.skipAlign:
+            if self.alignZfile.get():
+                # Check if we have AlignZ information per tilt-series
+                args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
+            else:
                 args['-AlignZ'] = self.alignZ
 
             if self.sampleType.get() == LOCAL_MOTION_COORDS:
@@ -730,6 +752,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except AttributeError:  # There is no outputSetOfTiltSeries
             pass
 
+    def readThicknessFile(self, filePath: os.PathLike):
+        """ Reads a text file with thickness information per tilt-series.
+        Example of how the file should look like:
+        Position_112 700
+        Position_35  650
+        Position_18  500
+        Position_114 1000
+        """
+        thickPerTs = {}
+        with open(filePath, "r") as f:
+            lines = f.readlines()
+            lines = filter(lambda x: x.strip(), lines)
+
+            for line in lines:
+                values = line.split()
+                thickPerTs[values[0]] = values[1]
+
+        return thickPerTs
+
     def getFilePath(self,
                     tsFn: Union[str, os.PathLike],
                     prefix: str,
@@ -816,15 +857,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                          outputFn: os.PathLike) -> None:
         """ Generate .tlt file with tilt angles and accumulated dose. """
         angleList = []
+        aretomo2 = Plugin.getActiveVersion() != V1_3_4
 
         for ti in ts.iterItems(orderBy="_index"):
+            acqOrder = ti.getAcquisitionOrder()
             accDose = ti.getAcquisition().getAccumDose()
             tAngle = ti.getTiltAngle()
-            angleList.append((tAngle, accDose))
+            angleList.append((tAngle, acqOrder if aretomo2 else accDose))
 
         with open(outputFn, 'w') as f:
             if self.doDW:
-                f.writelines(f"{i[0]:0.3f} {i[1]:0.3f}\n" for i in angleList)
+                f.writelines(f"{i[0]:0.3f} {i[1]}\n" for i in angleList)
             else:
                 f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 
