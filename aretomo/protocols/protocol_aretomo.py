@@ -296,7 +296,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                       help="Extra command line parameters. See AreTomo help.")
 
         form.addHidden(params.GPU_LIST, params.StringParam,
-                       default='0', label="Choose GPU IDs")
+                       default='0', label="Choose GPU IDs",
+                       help="")
 
         form.addParallelSection(threads=2, mpi=0)
 
