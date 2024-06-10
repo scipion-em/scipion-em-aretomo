@@ -56,6 +56,7 @@ OUT_TS = "TiltSeries"
 OUT_TS_ALN = "InterpolatedTiltSeries"
 OUT_TOMO = "Tomograms"
 OUT_CTFS = "CTFTomoSeries"
+FAILED_TS = 'FailedTiltSeries'
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
@@ -64,6 +65,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     _devStatus = PROD
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
                         OUT_TS_ALN: SetOfTiltSeries,
+                        FAILED_TS: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms,
                         OUT_CTFS: SetOfCTFTomoSeries}
 
@@ -75,6 +77,21 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
         self.excludedViewsMsg = String()
+        self._failedTsList = []
+
+    def tryExceptDecorator(func):
+        """ This decorator wraps the step in a try/except module which adds
+        the tilt series ID to the failed TS array
+        in case the step fails"""
+
+        def wrapper(self, tsId, *args):
+            try:
+                func(self, tsId, *args)
+            except Exception as e:
+                self.error("Some error occurred calling %s with TS id %s: %s" % (func.__name__, tsId, e))
+                self._failedTsList.append(tsId)
+
+        return wrapper
 
         # --------------------------- DEFINE param functions ----------------------
 
@@ -133,7 +150,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'Z height should be always smaller than tomogram '
                            'thickness and should be close to the sample '
                            'thickness.')
-        
+
         form.addParam('alignZfile', params.FileParam,
                       expertLevel=params.LEVEL_ADVANCED,
                       condition='not skipAlign and not useInputProt',
@@ -144,7 +161,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'containing the tsId and the second containing the AlignZ value '
                            'for that tilt-series. You can specify one tilt-series '
                            'per line.')
-        
+
         form.addParam('tomoThickness', params.IntParam,
                       condition='makeTomo', important=True,
                       default=1200, label='Tomogram thickness unbinned (voxels)',
@@ -324,13 +341,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     self.TS_read.append(ts.getObjId())
                     try:
                         args = (ts.getObjId(), ts.getTsId(), ts.getFirstItem().getFileName())
-                        convertInput = self._insertFunctionStep(
-                            self.convertInputStep, *args, prerequisites=[])
-                        runAreTomo = self._insertFunctionStep(
-                            self.runAreTomoStep, *args, prerequisites=[convertInput])
-                        createOutputS = self._insertFunctionStep(
-                            self.createOutputStep, *args, prerequisites=[runAreTomo])
-                        closeSetStepDeps.append(createOutputS)
+                        convertInput = self._insertFunctionStep(self.convertInputStep, *args,
+                                                                prerequisites=[])
+                        runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
+                                                              prerequisites=[convertInput])
+                        createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
+                                                                 prerequisites=[runAreTomo])
+                        createOutputSFailed = self._insertFunctionStep(self.createOutputFailedStep, *args,
+                                                                       prerequisites=[createOutputS])
+                        closeSetStepDeps.append(createOutputSFailed)
 
                     except Exception as e:
                         self.error(f'Error reading TS info: {e}')
@@ -376,6 +395,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             else:
                 raise FileNotFoundError("Missing input aln file ", protAlnBase)
 
+    @tryExceptDecorator
     def runAreTomoStep(self, tsObjId: int, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
         self.info(f'------- runAreTomoStep ts_id: {tsObjId}')
@@ -672,6 +692,31 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 outputCtfs.write()
                 self._store(outputCtfs)
 
+    def createOutputFailedStep(self, tsObjId: int, tsId: str, tsFn: str):
+        if tsId in self._failedTsList:
+            ts = self._getSetOfTiltSeries().getItem(TiltSeries.TS_ID_FIELD, tsId)
+            inTsSet = self._getSetOfTiltSeries()
+            outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
+            newTs = ts.clone()
+            newTs.copyInfo(ts)
+            outTsSet.append(newTs)
+
+            for tiltImage in ts:
+                newTi = TiltImage()
+                newTi.copyInfo(tiltImage, copyId=True, copyTM=True)
+                newTi.setAcquisition(tiltImage.getAcquisition())
+                newTi.setLocation(tiltImage.getLocation())
+                newTs.append(newTi)
+
+            ih = ImageHandler()
+            x, y, z, _ = ih.getDimensions(tsFn)
+            newTs.setDim((x, y, z))
+            newTs.write(properties=False)
+
+            outTsSet.update(newTs)
+            outTsSet.write()
+            self._store(outTsSet)
+
     def _closeOutputSet(self):
         super()._closeOutputSet()
         if self.makeTomo:
@@ -874,3 +919,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def _saveInterpolated(self) -> bool:
         return self.saveStack
+
+    def getOutputFailedSetOfTiltSeries(self, inputSet):
+        failedTsSet = getattr(self, FAILED_TS, None)
+        if failedTsSet:
+            failedTsSet.enableAppend()
+        else:
+            outTsFailedSet = SetOfTiltSeries.create(self._getPath(), template='tiltseries', suffix='Failed')
+            outTsFailedSet.copyInfo(inputSet)
+            outTsFailedSet.setDim(inputSet.getDim())
+            outTsFailedSet.setStreamState(Set.STREAM_OPEN)
+
+            self._defineOutputs(**{FAILED_TS: outTsFailedSet})
+            self._defineSourceRelation(inputSet, outTsFailedSet)
+
+        return failedTsSet
