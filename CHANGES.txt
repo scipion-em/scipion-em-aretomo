@@ -1,3 +1,7 @@
+3.10:
+  Users:
+   - Aretomo does nos fail when closing its output when process is killed
+   - Listed protocol's names are defaults ones.
 3.9.1:
   Users:
    - Add aretomo2 1.1.2

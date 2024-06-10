@@ -28,11 +28,12 @@ import os
 
 import pwem
 import pyworkflow.utils as pwutils
+from pyworkflow import VarTypes
 
 from .constants import *
 
 
-__version__ = '3.9.1'
+__version__ = '3.10.0'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -43,10 +44,13 @@ class Plugin(pwem.Plugin):
     _supportedVersions = [V1_0_0, V1_1_2, V1_3_4]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
-    @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_2}')
-        cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_2}',
+                         description="Root folder where aretomo was extracted. Is assumes binaries are under that folder/bin.",
+                         var_type=VarTypes.FOLDER)
+        cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB,
+                       description="Path to the CUDA lib path to use with the Aretomo binary.",
+                       var_type=VarTypes.FOLDER)
 
         # Define the variable default value based on the guessed cuda version
         cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB,
@@ -58,7 +62,9 @@ class Plugin(pwem.Plugin):
             binaryStr = V1_0_0 if cls.getVar(ARETOMO_HOME).endswith(V1_0_0) else V1_1_2
             binaryName = f'AreTomo2_{binaryStr}_Cuda{cudaVersion.major}{cudaVersion.minor}'
 
-        cls._defineVar(ARETOMO_BIN, binaryName)
+        cls._defineVar(ARETOMO_BIN, binaryName,
+                       description="Aretomo binary file to use. Should match the cuda pointed by %s. It also should be under %s/bin folder" % (ARETOMO_CUDA_LIB, ARETOMO_HOME),
+                       var_type=VarTypes.FILENAME)
 
     @classmethod
     def getEnviron(cls):
@@ -67,6 +73,8 @@ class Plugin(pwem.Plugin):
         # Get AreTomo CUDA library path if defined
         cudaLib = cls.getVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
         environ.addLibrary(cudaLib)
+
+        environ.set("LD_LIBRARY_PATH","")
 
         return environ
 
