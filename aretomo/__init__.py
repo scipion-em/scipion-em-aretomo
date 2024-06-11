@@ -74,8 +74,6 @@ class Plugin(pwem.Plugin):
         cudaLib = cls.getVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB)
         environ.addLibrary(cudaLib)
 
-        environ.set("LD_LIBRARY_PATH","")
-
         return environ
 
     @classmethod
