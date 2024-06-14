@@ -334,7 +334,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self._insertFunctionStep(self.closeOutputSetStep, prerequisites=closeSetStepDeps)
                 break
             for ts in self._getSetOfTiltSeries():
-                if ts.getObjId() not in self.TS_read:
+                if ts.getTsId() not in self.TS_read:
                     tsId = ts.getTsId()
                     self.info(f"Steps created for TS_ID: {tsId}")
                     self.TS_read.append(tsId)
