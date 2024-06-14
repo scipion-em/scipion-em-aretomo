@@ -693,24 +693,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def createOutputFailedStep(self, tsId: str, tsFn: str):
         if tsId in self._failedTsList:
-            ts = self._getSetOfTiltSeries().getItem(TiltSeries.TS_ID_FIELD, tsId)
+            ts = self.getTsFromTsId(tsId)
             inTsSet = self._getSetOfTiltSeries()
             outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
             newTs = ts.clone()
             newTs.copyInfo(ts)
             outTsSet.append(newTs)
-
-            for tiltImage in ts:
-                newTi = tiltImage.clone()
-                # newTi = TiltImage()
-                # newTi.copyInfo(tiltImage, copyId=True, copyTM=True)
-                # newTi.setAcquisition(tiltImage.getAcquisition())
-                # newTi.setLocation(tiltImage.getLocation())
-                newTs.append(newTi)
-
-            # ih = ImageHandler()
-            # x, y, z, _ = ih.getDimensions(tsFn)
-            # newTs.setDim((x, y, z))
+            newTs.copyItems(ts)
             newTs.write(properties=False)
             outTsSet.update(newTs)
             outTsSet.write()
@@ -797,7 +786,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except AttributeError:  # There is no outputSetOfTiltSeries
             pass
 
-    def readThicknessFile(self, filePath: os.PathLike):
+    @staticmethod
+    def readThicknessFile(filePath: os.PathLike):
         """ Reads a text file with thickness information per tilt-series.
         Example of how the file should look like:
         Position_112 700
@@ -816,8 +806,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         return thickPerTs
 
-    def getFilePath(self,
-                    tsFn: Union[str, os.PathLike],
+    @staticmethod
+    def getFilePath(tsFn: Union[str, os.PathLike],
                     prefix: str,
                     ext: Optional[str] = None) -> Union[str, os.PathLike]:
         fileName, fileExtension = os.path.splitext(os.path.basename(tsFn))
@@ -924,13 +914,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if failedTsSet:
             failedTsSet.enableAppend()
         else:
-            outTsFailedSet = SetOfTiltSeries.create(self._getPath(), template='tiltseries', suffix='Failed')
-            outTsFailedSet.copyInfo(inputSet)
-            outTsFailedSet.setDim(inputSet.getDim())
-            outTsFailedSet.setStreamState(Set.STREAM_OPEN)
+            failedTsSet = SetOfTiltSeries.create(self._getPath(), template='tiltseries', suffix='Failed')
+            failedTsSet.copyInfo(inputSet)
+            failedTsSet.setDim(inputSet.getDim())
+            failedTsSet.setStreamState(Set.STREAM_OPEN)
 
-            self._defineOutputs(**{FAILED_TS: outTsFailedSet})
-            self._defineSourceRelation(inputSet, outTsFailedSet)
+            self._defineOutputs(**{FAILED_TS: failedTsSet})
+            self._defineSourceRelation(inputSet, failedTsSet)
 
         return failedTsSet
 
