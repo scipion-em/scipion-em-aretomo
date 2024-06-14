@@ -693,7 +693,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def createOutputFailedStep(self, tsId: str, tsFn: str):
         if tsId in self._failedTsList:
-            ts = self._getSetOfTiltSeries().getItem(TiltSeries.TS_ID_FIELD, tsId)
+            ts = self.getTsFromTsId(tsId)
             inTsSet = self._getSetOfTiltSeries()
             outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
             newTs = ts.clone()
@@ -924,13 +924,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if failedTsSet:
             failedTsSet.enableAppend()
         else:
-            outTsFailedSet = SetOfTiltSeries.create(self._getPath(), template='tiltseries', suffix='Failed')
-            outTsFailedSet.copyInfo(inputSet)
-            outTsFailedSet.setDim(inputSet.getDim())
-            outTsFailedSet.setStreamState(Set.STREAM_OPEN)
+            failedTsSet = SetOfTiltSeries.create(self._getPath(), template='tiltseries', suffix='Failed')
+            failedTsSet.copyInfo(inputSet)
+            failedTsSet.setDim(inputSet.getDim())
+            failedTsSet.setStreamState(Set.STREAM_OPEN)
 
-            self._defineOutputs(**{FAILED_TS: outTsFailedSet})
-            self._defineSourceRelation(inputSet, outTsFailedSet)
+            self._defineOutputs(**{FAILED_TS: failedTsSet})
+            self._defineSourceRelation(inputSet, failedTsSet)
 
         return failedTsSet
 
