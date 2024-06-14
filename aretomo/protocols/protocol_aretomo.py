@@ -699,18 +699,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             newTs = ts.clone()
             newTs.copyInfo(ts)
             outTsSet.append(newTs)
-
-            for tiltImage in ts:
-                newTi = tiltImage.clone()
-                # newTi = TiltImage()
-                # newTi.copyInfo(tiltImage, copyId=True, copyTM=True)
-                # newTi.setAcquisition(tiltImage.getAcquisition())
-                # newTi.setLocation(tiltImage.getLocation())
-                newTs.append(newTi)
-
-            # ih = ImageHandler()
-            # x, y, z, _ = ih.getDimensions(tsFn)
-            # newTs.setDim((x, y, z))
+            newTs.copyItems(ts)
             newTs.write(properties=False)
             outTsSet.update(newTs)
             outTsSet.write()
@@ -797,7 +786,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except AttributeError:  # There is no outputSetOfTiltSeries
             pass
 
-    def readThicknessFile(self, filePath: os.PathLike):
+    @staticmethod
+    def readThicknessFile(filePath: os.PathLike):
         """ Reads a text file with thickness information per tilt-series.
         Example of how the file should look like:
         Position_112 700
@@ -816,8 +806,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         return thickPerTs
 
-    def getFilePath(self,
-                    tsFn: Union[str, os.PathLike],
+    @staticmethod
+    def getFilePath(tsFn: Union[str, os.PathLike],
                     prefix: str,
                     ext: Optional[str] = None) -> Union[str, os.PathLike]:
         fileName, fileExtension = os.path.splitext(os.path.basename(tsFn))
