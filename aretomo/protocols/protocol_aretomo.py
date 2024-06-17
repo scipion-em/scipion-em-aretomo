@@ -763,6 +763,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 errors.append("Input tilt-series already have alignment "
                               "information. You probably want to skip alignment step.")
 
+        if self.outImod.get() != 0 and not self.doDW:
+            errors.append("Dose weighting needs to be enabled when "
+                          "saving extra IMOD output.")
+
         return errors
 
     # --------------------------- UTILS functions -----------------------------
