@@ -1,3 +1,11 @@
+3.9.2:
+   - Aretomo does nos fail when closing its output when process is killed
+   - Listed protocol's names are defaults ones.
+   - Tolerate failed tilt-series, avoiding the protocol interruption and generating a specific output for the failed
+     tilt-series.
+   - Force enable DW when saving extra IMOD output
+  Developers:
+   - Steps now use the tsId instead of the objId.
 3.9.1:
   Users:
    - Add aretomo2 1.1.2
