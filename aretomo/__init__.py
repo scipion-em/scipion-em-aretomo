@@ -33,7 +33,7 @@ from pyworkflow import VarTypes
 from .constants import *
 
 
-__version__ = '3.9.2'
+__version__ = '3.9.3'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -44,6 +44,7 @@ class Plugin(pwem.Plugin):
     _supportedVersions = [V1_0_0, V1_1_2, V1_3_4]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
+    @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_2}',
                          description="Root folder where aretomo was extracted. Is assumes binaries are under that folder/bin.",
