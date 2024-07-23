@@ -44,6 +44,7 @@ class Plugin(pwem.Plugin):
     _supportedVersions = [V1_0_0, V1_1_2, V1_3_4]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
+    @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_2}',
                          description="Root folder where aretomo was extracted. Is assumes binaries are under that folder/bin.",
