@@ -1,3 +1,4 @@
+3.9.3: hotfix: _defineVariables method must be a class method to be compatible with scipion command config -p
 3.9.2:
    - Aretomo does nos fail when closing its output when process is killed
    - Listed protocol's names are defaults ones.
