@@ -29,6 +29,7 @@
 # **************************************************************************
 
 import os
+import sys
 from glob import glob
 import numpy as np
 import time
@@ -301,7 +302,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                        default='0', label="Choose GPU IDs",
                        help="")
 
-        form.addParallelSection(threads=2, mpi=0)
+        form.addParallelSection(threads=3, mpi=0)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -315,29 +316,38 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         while True:
             listTSInput = self._getSetOfTiltSeries().getTSIds()
-            if not self._getSetOfTiltSeries().isStreamOpen() and self.TS_read == listTSInput:
+            if not self._isInputSetTiltSeriesStreamOpen() and self.TS_read == listTSInput:
                 self.info('Input set closed, all items processed\n')
                 self._insertFunctionStep(self.closeOutputSetStep, prerequisites=closeSetStepDeps)
                 break
-            for ts in self._getSetOfTiltSeries():
-                if ts.getTsId() not in self.TS_read:
-                    tsId = ts.getTsId()
-                    self.info(f"Steps created for TS_ID: {tsId}")
-                    self.TS_read.append(tsId)
-                    try:
-                        args = (tsId, ts.getFirstItem().getFileName())
-                        convertInput = self._insertFunctionStep(self.convertInputStep, *args,
-                                                                prerequisites=[])
-                        runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
-                                                              prerequisites=[convertInput])
-                        createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
-                                                                 prerequisites=[runAreTomo])
-                        closeSetStepDeps.append(createOutputS)
 
-                    except Exception as e:
-                        self.error(f'Error reading TS info: {e}')
-                        self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
-                time.sleep(10)
+            print(listTSInput, self.TS_read)
+            # if self._newTiltSeriesToProcess(listTSInput, self.TS_read): # todo: esto por algun motivo no le gusta y bloquea el protocolo de arriba
+            if True: # Asi funciona
+                for ts in self._getSetOfTiltSeries():
+                    if ts.getTsId() not in self.TS_read:
+                        tsId = ts.getTsId()
+                        self.info(f"Steps created for TS_ID: {tsId}")
+                        self.TS_read.append(tsId)
+                        try:
+                            args = (tsId, ts.getFirstItem().getFileName())
+                            convertInput = self._insertFunctionStep(self.convertInputStep, *args,
+                                                                    prerequisites=[])
+                            runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
+                                                                  prerequisites=[convertInput])
+                            createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
+                                                                     prerequisites=[runAreTomo])
+                            closeSetStepDeps.append(createOutputS)
+
+                        except Exception as e:
+                            self.error(f'Error reading TS info: {e}')
+                            self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
+            # else: # todo esto por algun motivo no le gusta y bloquea el protocolo de arriba
+            #    self.info('No new tilt Series to process')
+
+            print('Sleeping 10 seconds')
+            time.sleep(20)
+            sys.stdout.flush()  # One last flush
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsId: str, tsFn: str):
@@ -869,6 +879,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def _getSetOfTiltSeries(self) -> SetOfTiltSeries:
         return self.inputSetOfTiltSeries.get()
+
+    def _isInputSetTiltSeriesStreamOpen(self):
+        """ Returns the input set of TiltSeries"""
+        tiltSeriesSet = self.inputSetOfTiltSeries.get()
+        tiltSeriesSet.loadAllProperties()
+        return tiltSeriesSet.isStreamOpen()
+
+    def _newTiltSeriesToProcess(self, listTSInput, listTSProcessed):
+        return listTSProcessed != listTSInput
 
     def _getOutputSampling(self) -> float:
         return self._getInputSampling() * self.binFactor.get()
