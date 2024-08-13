@@ -1,3 +1,4 @@
+3.9.4: set aretomo2 1.0.0 as default, because 1.1.2 has broken remove dark option
 3.9.3: hotfix: _defineVariables method must be a class method to be compatible with scipion command config -p
 3.9.2:
    - Aretomo does nos fail when closing its output when process is killed

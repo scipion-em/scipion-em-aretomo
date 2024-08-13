@@ -33,7 +33,7 @@ from pyworkflow import VarTypes
 from .constants import *
 
 
-__version__ = '3.9.3'
+__version__ = '3.9.4'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
@@ -46,8 +46,9 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_2}',
-                         description="Root folder where aretomo was extracted. Is assumes binaries are under that folder/bin.",
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_0_0}',
+                         description="Root folder where aretomo was extracted. Is assumes "
+                                     "binaries are under that folder/bin.",
                          var_type=VarTypes.FOLDER)
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB,
                        description="Path to the CUDA lib path to use with the Aretomo binary.",
@@ -64,7 +65,8 @@ class Plugin(pwem.Plugin):
             binaryName = f'AreTomo2_{binaryStr}_Cuda{cudaVersion.major}{cudaVersion.minor}'
 
         cls._defineVar(ARETOMO_BIN, binaryName,
-                       description="Aretomo binary file to use. Should match the cuda pointed by %s. It also should be under %s/bin folder" % (ARETOMO_CUDA_LIB, ARETOMO_HOME),
+                       description="Aretomo binary file to use. Should match the cuda pointed by %s. "
+                                   "It also should be under %s/bin folder" % (ARETOMO_CUDA_LIB, ARETOMO_HOME),
                        var_type=VarTypes.FILENAME)
 
     @classmethod
