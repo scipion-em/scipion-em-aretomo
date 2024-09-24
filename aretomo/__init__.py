@@ -46,7 +46,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_3}',
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_0_0}',
                          description="Root folder where aretomo was extracted. Is assumes "
                                      "binaries are under that folder/bin.",
                          var_type=VarTypes.FOLDER)
@@ -104,7 +104,7 @@ class Plugin(pwem.Plugin):
         for v in [V1_0_0, V1_1_2, V1_1_3]:
             env.addPackage('aretomo2', version=v,
                            tar=f"aretomo2-{v}.tgz",
-                           default=v == V1_1_3)
+                           default=v == V1_0_0)
 
         env.addPackage('aretomo', version=V1_3_4,
                        tar=f"aretomo_v{V1_3_4}.tgz")
