@@ -337,7 +337,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     except Exception as e:
                         self.error(f'Error reading TS info: {e}')
                         self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
-                time.sleep(10)
+            time.sleep(10)
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsId: str, tsFn: str):
