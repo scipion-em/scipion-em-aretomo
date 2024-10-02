@@ -63,11 +63,12 @@ testAcq145.setAccumDose(138.1536)
 
 
 class DataSetEmpiar10453(Enum):
+    tsFilesPattern = '*.mdoc'
     unbinnedPixSize = 1.33
     tsDims = [5760, 4092, 41]
     nAngles = 41
-    testAcqDict = {TS_079: testAcq079,
-                   TS_145: testAcq145}
+    testTsAcqDict = {TS_079: testAcq079,
+                     TS_145: testAcq145}
 
     @classmethod
     def getInterpTsDims(cls, binningFactor=1, nImgs=-1):
