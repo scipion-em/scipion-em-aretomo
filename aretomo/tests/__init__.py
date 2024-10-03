@@ -28,7 +28,6 @@ from enum import Enum
 from pyworkflow.tests import DataSet
 from tomo.objects import TomoAcquisition
 
-
 DataSet(name='tomo-em',
         folder='tomo-em',
         files={
@@ -54,12 +53,18 @@ testAcq079.setAngleMin(-60.005)
 testAcq079.setAngleMax(59.9828)
 testAcq079.setDosePerFrame(3.55679)
 testAcq079.setAccumDose(138.71481)
+# Acquisition of TS_079 - Interpolated
+testAcq079Interp = testAcq079.clone()
+testAcq079Interp.setTiltAxisAngle(0.)
 # Acquisition of TS_145
 testAcq145 = testAcq.clone()
 testAcq145.setAngleMin(-60.007)
 testAcq145.setAngleMax(59.9848)
 testAcq145.setDosePerFrame(3.5424)
 testAcq145.setAccumDose(138.1536)
+# Acquisition of TS_145 - Interpolated
+testAcq145Interp = testAcq145.clone()
+testAcq145Interp.setTiltAxisAngle(0.)
 
 
 class DataSetEmpiar10453(Enum):
@@ -69,11 +74,19 @@ class DataSetEmpiar10453(Enum):
     nAngles = 41
     testTsAcqDict = {TS_079: testAcq079,
                      TS_145: testAcq145}
+    testTsInterpAcqDict = {TS_079: testAcq079Interp,
+                           TS_145: testAcq145Interp}
 
     @classmethod
-    def getInterpTsDims(cls, binningFactor=1, nImgs=-1):
+    def getTestTsDims(cls, binningFactor=1, nImgs=-1):
         return [cls.tsDims[0] / binningFactor,
                 cls.tsDims[1] / binningFactor,
                 nImgs]
+
+    @classmethod
+    def getTestInterpTsDims(cls, binningFactor=1, nImgs=-1):
+        newDims = cls.getTestTsDims(binningFactor=binningFactor, nImgs=-nImgs)
+        return [newDims[1], newDims[0], newDims[2]]
+
 
 DataSet(name=EMDB_10453, folder=EMDB_10453, files={el.name: el.value for el in DataSetEmpiar10453})

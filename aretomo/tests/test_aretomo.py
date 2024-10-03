@@ -41,13 +41,15 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
     ds = None
     importedTs = None
     unbinnedSRate = DataSetEmpiar10453.unbinnedPixSize.value
-    nAngles = DataSetEmpiar10453.nAngles
+    nAngles = DataSetEmpiar10453.nAngles.value
     tsAcqDict = DataSetEmpiar10453.testTsAcqDict.value
+    tsInterpAcqDict = DataSetEmpiar10453.testTsInterpAcqDict.value
     nTiltSeries = len(tsAcqDict)
 
     alignZ = 800
     binFactor = 4
     unbinnedThk = 1200
+
     # expectedTomoDims = [958, 926, 300]
 
     @classmethod
@@ -101,8 +103,10 @@ class TestAreTomo(TestAreTomoBase):
                          "\n\t- CTF not generated"))
 
         # Expected values
-        expectedDimsTsInterp = DataSetEmpiar10453.getInterpTsDims(binningFactor=self.binFactor,
-                                                                  nImgs=self.nAngles)
+        expectedDimsTs = DataSetEmpiar10453.getTestTsDims(binningFactor=self.binFactor,
+                                                          nImgs=self.nAngles)
+        expectedDimsInterpTs = DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
+                                                                     nImgs=self.nAngles)
 
         # Run the protocol
         prot = self.newProtocol(ProtAreTomoAlignRecon,
@@ -116,27 +120,26 @@ class TestAreTomo(TestAreTomoBase):
         prot.setObjLabel('Align only, no CTF')
         self.launchProtocol(prot)
 
-    #     # CHECK THE OUTPUTS
-    #     # Tilt series
-    #     self.checkTiltSeries(getattr(prot, OUT_TS, None),
-    #                          expectedSetSize=self.nTiltSeries,
-    #                          expectedSRate=self.unbinnedSRate,
-    #                          expectedDimensions=self.expectedDimsTs,
-    #                          testAcqObj=tsAcqDict,
-    #                          hasAlignment=True,
-    #                          alignment=ALIGN_2D,
-    #                          anglesCount=self.nAnglesDict)
-    #     # Interpolated TS
-    #     self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
-    #                          expectedSetSize=self.nTiltSeries,
-    #                          expectedSRate=self.unbinnedSRate * self.binFactor,
-    #                          # Protocol sets the bin factor to 2 by default
-    #                          expectedDimensions=expectedDimsTsInterp,
-    #                          testAcqObj=self.tsAcqInterpDwDict,
-    #                          anglesCount=self.nAnglesDict,
-    #                          isInterpolated=True)
-    #     # CTFs
-    #     self.assertIsNone(getattr(prot, OUT_CTFS, None))
+        # CHECK THE OUTPUTS
+        # Tilt series
+        self.checkTiltSeries(getattr(prot, OUT_TS, None),
+                             expectedSetSize=self.nTiltSeries,
+                             expectedSRate=self.unbinnedSRate,
+                             expectedDimensions=expectedDimsTs,
+                             testAcqObj=self.tsAcqDict,
+                             hasAlignment=True,
+                             alignment=ALIGN_2D,
+                             anglesCount=self.nAngles)
+        # Interpolated TS
+        self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
+                             expectedSetSize=self.nTiltSeries,
+                             expectedSRate=self.unbinnedSRate * self.binFactor,
+                             expectedDimensions=expectedDimsInterpTs,
+                             testAcqObj=self.tsInterpAcqDict,
+                             anglesCount=self.nAngles,
+                             isInterpolated=True)
+        # CTFs
+        self.assertIsNone(getattr(prot, OUT_CTFS, None))
     #
     # def test_align_02(self):
     #     print(magentaStr("\n==> Testing AreTomo:"
