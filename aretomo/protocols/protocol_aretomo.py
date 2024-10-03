@@ -337,6 +337,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     except Exception as e:
                         self.error(f'Error reading TS info: {e}')
                         self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
+            
             time.sleep(10)
 
     # --------------------------- STEPS functions -----------------------------
@@ -457,10 +458,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self.error('Aretomo execution failed for tsId %s -> %s' % (tsId, e))
 
     def createOutputStep(self, tsId: str, tsFn: str):
-        if tsId in self._failedTsList:
-            self.createOutputFailedTs(tsId)
-        else:
-            self.createOutputTs(tsId, tsFn)
+        with self._lock:
+            if tsId in self._failedTsList:
+                self.createOutputFailedTs(tsId)
+            else:
+                self.createOutputTs(tsId, tsFn)
 
     def createOutputTs(self, tsId: str, tsFn: str):
         self.info(f'------- createOutputStep ts_id: {tsId}')
