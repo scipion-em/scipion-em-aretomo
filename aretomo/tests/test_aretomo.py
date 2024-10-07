@@ -31,18 +31,19 @@ from pyworkflow.tests import DataSet, setupTestProject
 from tomo.protocols import ProtImportTs
 
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
-from . import DataSetEmpiar10453, EMDB_10453
+from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145
 
 from ..protocols.protocol_aretomo import (ProtAreTomoAlignRecon, OUT_TS, OUT_TOMO,
                                           OUT_TS_ALN, OUT_CTFS)
 
 
-class TestAreTomoBase(TestBaseCentralizedLayer):
+class TestAreTomo2Base(TestBaseCentralizedLayer):
     ds = None
     importedTs = None
     unbinnedSRate = DataSetEmpiar10453.unbinnedPixSize.value
     nAngles = DataSetEmpiar10453.nAngles.value
     tsAcqDict = DataSetEmpiar10453.testTsAcqDict.value
+    tsRefTAxAcqDict = DataSetEmpiar10453.testTsRefTAxAcqDict.value
     tsInterpAcqDict = DataSetEmpiar10453.testTsInterpAcqDict.value
     nTiltSeries = len(tsAcqDict)
 
@@ -92,7 +93,7 @@ class TestAreTomoBase(TestBaseCentralizedLayer):
         return tsImported
 
 
-class TestAreTomo(TestAreTomoBase):
+class TestAreTomo2(TestAreTomo2Base):
 
     def test_align_01(self):
         print(magentaStr("\n==> Testing AreTomo:"
@@ -103,8 +104,15 @@ class TestAreTomo(TestAreTomoBase):
                          "\n\t- CTF not generated"))
 
         # Expected values
-        expectedDimsTs = DataSetEmpiar10453.getTestTsDims(binningFactor=self.binFactor,
-                                                          nImgs=self.nAngles)
+        # Dose weighting
+        testAcq079 = DataSetEmpiar10453.testAcq079RefTAx.value.clone()
+        testAcq145 = DataSetEmpiar10453.testAcq145RefTAx.value.clone()
+        testAcq079.setAccumDose = 0.
+        testAcq145.setAccumDose = 0.
+        testAcqDict = {TS_079: testAcq079,
+                       TS_145: testAcq145}
+
+        expectedDimsTs = DataSetEmpiar10453.getTestTsDims(nImgs=self.nAngles)
         expectedDimsInterpTs = DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
                                                                      nImgs=self.nAngles)
 
@@ -126,7 +134,7 @@ class TestAreTomo(TestAreTomoBase):
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
                              expectedDimensions=expectedDimsTs,
-                             testAcqObj=self.tsAcqDict,
+                             testAcqObj=testAcqDict,
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles)

@@ -53,39 +53,59 @@ testAcq079.setAngleMin(-60.005)
 testAcq079.setAngleMax(59.9828)
 testAcq079.setDosePerFrame(3.55679)
 testAcq079.setAccumDose(138.71481)
+# Acquisition of TS_079 - refined rot angle (overwrites the tilt axis angle)
+testAcq079RefTAx = testAcq079.clone()
+testAcq079RefTAx.setTiltAxisAngle(84.5276)
 # Acquisition of TS_079 - Interpolated
 testAcq079Interp = testAcq079.clone()
 testAcq079Interp.setTiltAxisAngle(0.)
+# testAcq079Interp.setAccumDose(0.)  # Aretomo do dose-weighting by default
+
 # Acquisition of TS_145
 testAcq145 = testAcq.clone()
 testAcq145.setAngleMin(-60.007)
 testAcq145.setAngleMax(59.9848)
 testAcq145.setDosePerFrame(3.5424)
 testAcq145.setAccumDose(138.1536)
+# Acquisition of TS_145 - refined rot angle (overwrites the tilt axis angle)
+testAcq145RefTAx = testAcq145.clone()
+testAcq145RefTAx.setTiltAxisAngle(84.1236)
 # Acquisition of TS_145 - Interpolated
 testAcq145Interp = testAcq145.clone()
 testAcq145Interp.setTiltAxisAngle(0.)
+# testAcq145Interp.setAccumDose(0.)  # Aretomo do dose-weighting by default
 
 
 class DataSetEmpiar10453(Enum):
     tsFilesPattern = '*.mdoc'
-    unbinnedPixSize = 1.33
+    unbinnedPixSize = 1.329
     tsDims = [5760, 4092, 41]
     nAngles = 41
+    testAcq079 = testAcq079
+    testAcq079RefTAx = testAcq079RefTAx
+    testAcq079Interp = testAcq079Interp
+    testAcq145 = testAcq145
+    testAcq145RefTAx = testAcq145RefTAx
+    testAcq145Interp = testAcq145Interp
     testTsAcqDict = {TS_079: testAcq079,
                      TS_145: testAcq145}
+    testTsRefTAxAcqDict = {TS_079: testAcq079RefTAx,
+                           TS_145: testAcq145RefTAx}
     testTsInterpAcqDict = {TS_079: testAcq079Interp,
                            TS_145: testAcq145Interp}
 
     @classmethod
     def getTestTsDims(cls, binningFactor=1, nImgs=-1):
-        return [cls.tsDims[0] / binningFactor,
-                cls.tsDims[1] / binningFactor,
-                nImgs]
+        tsDims = cls.tsDims.value
+        dim1 = int(tsDims[0] / binningFactor)
+        dim2 = int(tsDims[1] / binningFactor)
+        return [dim1 if dim1 % 2 == 0 else dim1 - 1,  # If odd, aretomo subtracts 1
+                dim2 if dim2 % 2 == 0 else dim2 - 1,
+                int(nImgs)]
 
     @classmethod
     def getTestInterpTsDims(cls, binningFactor=1, nImgs=-1):
-        newDims = cls.getTestTsDims(binningFactor=binningFactor, nImgs=-nImgs)
+        newDims = cls.getTestTsDims(binningFactor=binningFactor, nImgs=nImgs)
         return [newDims[1], newDims[0], newDims[2]]
 
 
