@@ -55,6 +55,18 @@ class TestAreTomo2Base(TestBaseCentralizedLayer):
 
     @classmethod
     def setUpClass(cls):
+        # JORGE
+        import os
+        fname = "/home/jjimenez/test_JJ.txt"
+        if os.path.exists(fname):
+            os.remove(fname)
+        fjj = open(fname, "a+")
+        fjj.write('JORGE--------->onDebugMode PID {}'.format(os.getpid()))
+        fjj.close()
+        print('JORGE--------->onDebugMode PID {}'.format(os.getpid()))
+        import time
+        time.sleep(10)
+        # JORGE_END
         setupTestProject(cls)
         cls.ds = DataSet.getDataSet(EMDB_10453)
         cls._runPreviousProtocols()
@@ -104,17 +116,17 @@ class TestAreTomo2(TestAreTomo2Base):
                          "\n\t- CTF not generated"))
 
         # Expected values
-        # Dose weighting
-        testAcq079 = DataSetEmpiar10453.testAcq079RefTAx.value.clone()
-        testAcq145 = DataSetEmpiar10453.testAcq145RefTAx.value.clone()
-        testAcq079.setAccumDose = 0.
-        testAcq145.setAccumDose = 0.
-        testAcqDict = {TS_079: testAcq079,
-                       TS_145: testAcq145}
+        # Dose weighting = True in this test
+        testAcq079 = DataSetEmpiar10453.testAcq079Interp.value.clone()
+        testAcq145 = DataSetEmpiar10453.testAcq145Interp.value.clone()
+        testAcq079.setAccumDose(0.)
+        testAcq145.setAccumDose(0.)
+        testInterpDWAcqDict = {TS_079: testAcq079,
+                               TS_145: testAcq145}
 
         expectedDimsTs = DataSetEmpiar10453.getTestTsDims(nImgs=self.nAngles)
         expectedDimsInterpTs = DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
-                                                                     nImgs=self.nAngles)
+                                                                      nImgs=self.nAngles)
 
         # Run the protocol
         prot = self.newProtocol(ProtAreTomoAlignRecon,
@@ -134,7 +146,7 @@ class TestAreTomo2(TestAreTomo2Base):
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
                              expectedDimensions=expectedDimsTs,
-                             testAcqObj=testAcqDict,
+                             testAcqObj=self.tsRefTAxAcqDict,
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles)
@@ -143,7 +155,7 @@ class TestAreTomo2(TestAreTomo2Base):
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate * self.binFactor,
                              expectedDimensions=expectedDimsInterpTs,
-                             testAcqObj=self.tsInterpAcqDict,
+                             testAcqObj=testInterpDWAcqDict,
                              anglesCount=self.nAngles,
                              isInterpolated=True)
         # CTFs
