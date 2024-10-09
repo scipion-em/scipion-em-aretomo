@@ -68,10 +68,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         FAILED_TS: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms,
                         OUT_CTFS: SetOfCTFTomoSeries}
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.TS_read = []
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
@@ -317,7 +317,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             listTSInput = self._getSetOfTiltSeries().getTSIds()
             if not self._getSetOfTiltSeries().isStreamOpen() and self.TS_read == listTSInput:
                 self.info('Input set closed, all items processed\n')
-                self._insertFunctionStep(self.closeOutputSetStep, prerequisites=closeSetStepDeps)
+                self._insertFunctionStep(self.closeOutputSetStep, prerequisites=closeSetStepDeps, needsGPU=False)
                 break
             for ts in self._getSetOfTiltSeries():
                 if ts.getTsId() not in self.TS_read:
@@ -327,11 +327,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     try:
                         args = (tsId, ts.getFirstItem().getFileName())
                         convertInput = self._insertFunctionStep(self.convertInputStep, *args,
-                                                                prerequisites=[])
+                                                                prerequisites=[], needsGPU=False)
                         runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
-                                                              prerequisites=[convertInput])
+                                                              prerequisites=[convertInput], needsGPU=True)
                         createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
-                                                                 prerequisites=[runAreTomo])
+                                                                 prerequisites=[runAreTomo], needsGPU=False)
                         closeSetStepDeps.append(createOutputS)
 
                     except Exception as e:
