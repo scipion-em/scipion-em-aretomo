@@ -31,7 +31,7 @@ from pyworkflow.tests import DataSet, setupTestProject
 from tomo.protocols import ProtImportTs
 
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
-from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145
+from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145, testAcq079Interp
 
 from ..protocols.protocol_aretomo import (ProtAreTomoAlignRecon, OUT_TS, OUT_TOMO,
                                           OUT_TS_ALN, OUT_CTFS)
@@ -148,33 +148,38 @@ class TestAreTomo2(TestAreTomo2Base):
                              isInterpolated=True)
         # CTFs
         self.assertIsNone(getattr(prot, OUT_CTFS, None))
-    #
-    # def test_align_02(self):
-    #     print(magentaStr("\n==> Testing AreTomo:"
-    #                      "\n\t- Align only"
-    #                      "\n\t- Generate also the interpolated TS"
-    #                      "\n\t- No dose weighting"
-    #                      "\n\t- Some views are excluded"
-    #                      "\n\t- CTF generated"))
-    #
-    #     # Expected values
-    #     exludedViews = {TS_03: [0, 1, 2, 34, 35, 36, 37, 38, 39],
-    #                     TS_54: [0, 1, 2, 39, 40]}
-    #     expectedDimsTsInterp = {TS_03: [958, 926, 31],
-    #                             TS_54: [958, 926, 36]}
-    #     nAnglesDict = {TS_03: 31,
-    #                    TS_54: 36}
-    #     # Update the corresponding acquisition dictionary with the refined tilt axis angle values
-    #     # Note: they're different from in the previous test because of the views exclusion
-    #     tsAcqDict = self.tsAcqDict
-    #     tsAcqDict[TS_03].setTiltAxisAngle(84.9)
-    #     tsAcqDict[TS_54].setTiltAxisAngle(85.19)
-    #     # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
-    #     # accumulated values will be updated in the interpolated TS
-    #     tsAcqDictInterp = DataSetRe4STATuto.tsAcqInterpDict.value
-    #     tsAcqDictInterp[TS_03].setAccumDose(96)
-    #     tsAcqDictInterp[TS_54].setAccumDose(111)
-    #
+
+    def test_align_02(self):
+        print(magentaStr("\n==> Testing AreTomo:"
+                         "\n\t- Align only"
+                         "\n\t- Generate also the interpolated TS"
+                         "\n\t- No dose weighting"
+                         "\n\t- Some views are excluded"
+                         "\n\t- CTF generated"))
+
+        # Expected values
+        interpBinning = 4
+        exludedViews = {TS_079: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+                        TS_145: [40]}
+        nAnglesDict = {TS_079: 27,
+                       TS_145: 40}
+        expectedDimsTsInterp = {TS_079: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=interpBinning,
+                                                                               nImgs=nAnglesDict[TS_079]),
+                                TS_145: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=interpBinning,
+                                                                               nImgs=nAnglesDict[TS_145])}
+        # Update the corresponding acquisition dictionary with the refined tilt axis angle values
+        # Note: they're different from in the previous test because of the views exclusion
+        tsAcqDict = self.tsAcqDict
+        tsAcqDict[TS_079].setTiltAxisAngle(84.5478)
+        tsAcqDict[TS_145].setTiltAxisAngle(84.0226)
+        # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
+        # accumulated values will be updated in the interpolated TS
+        tsAcqDictInterp = self.tsInterpAcqDict
+        acq079 = tsAcqDictInterp[TS_079]
+        acq079.setAngleMax(56.99)
+        acq145 = tsAcqDictInterp[TS_145]
+        acq145.setAngleMin(-18.01)
+
     #     # Run the protocol
     #     prot = self.newProtocol(ProtAreTomoAlignRecon,
     #                             inputSetOfTiltSeries=self.inTsSet,
