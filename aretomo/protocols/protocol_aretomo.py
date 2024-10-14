@@ -625,7 +625,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         # unless making a tomo from pre-aligned TS
         if not (self.makeTomo and self.skipAlign):
             outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
-            newTs = ts.clone()
+            newTs = TiltSeries()
             newTs.copyInfo(ts)
             newTs.setSamplingRate(self._getInputSampling())
             newTs.setAlignment2D()
@@ -692,7 +692,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         ts = self.getTsFromTsId(tsId)
         inTsSet = self._getSetOfTiltSeries()
         outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
-        newTs = ts.clone()
+        newTs = TiltSeries()
         newTs.copyInfo(ts)
         outTsSet.append(newTs)
         newTs.copyItems(ts)
