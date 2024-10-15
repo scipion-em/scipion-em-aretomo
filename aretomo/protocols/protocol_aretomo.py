@@ -563,6 +563,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 excludedViewsList = []
                 accumDoseList = []
                 initialDoseList = []
+                tiltAngleList = []
                 for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
                     if secNum in AretomoAln.sections:
                         newTi = TiltImage()
@@ -572,7 +573,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         acqTi.setTiltAxisAngle(0.)
 
                         secIndex = AretomoAln.sections.index(secNum)
-                        newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
+                        tiltAngle = AretomoAln.tilt_angles[secIndex]
+                        tiltAngleList.append(tiltAngle)
+                        newTi.setTiltAngle(tiltAngle)
                         newTi.setLocation(secIndex + 1,
                                           (self.getFilePath(tsFn, extraPrefix, ".mrc")))
                         newTi.setSamplingRate(self._getOutputSampling())
@@ -606,7 +609,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     # TS if DW is not applied and there are excluded views
                     acq.setAccumDose(max(accumDoseList))
                     acq.setDoseInitial(min(initialDoseList))
+
                 acq.setTiltAxisAngle(0.)  # 0 because TS is aligned
+                acq.setAngleMin(min(tiltAngleList))
+                acq.setAngleMax(max(tiltAngleList))
                 newTs.setAcquisition(acq)
 
                 dims = self._getOutputDim(newTi.getFileName())
