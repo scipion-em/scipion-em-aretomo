@@ -932,3 +932,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     def getTsFromTsId(self, tsId):
         tsSet = self._getSetOfTiltSeries()
         return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
+
+    def genTmpTsFile(self, tsId, tsFn):
+        return self.getFilePath(tsFn, self._getTmpPath(tsId), ".mrc")
