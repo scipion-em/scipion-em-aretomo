@@ -671,24 +671,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     newTi.setEnabled(False)
                     transform.setMatrix(np.identity(3))
 
-                # if secNum not in AretomoAln.sections:
-                #     newTi.setEnabled(False)
-                #     transform.setMatrix(np.identity(3))
-                # else:
-                #     # set the tilt angles
-                #     secIndex = AretomoAln.sections.index(secNum)
-                #     acq = tiltImage.getAcquisition()
-                #     newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
-                #     acq.setTiltAxisAngle(AretomoAln.tilt_axes[secIndex])
-                #     newTi.setAcquisition(acq)
-                #
-                #     # set Transform
-                #     m = alignmentMatrix[:, :, secIndex]
-                #     self.debug(
-                #         f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
-                #         f"{AretomoAln.tilt_angles[secIndex]}")
-                #     transform.setMatrix(m)
-
                 newTi.setTransform(transform)
                 newTi.setSamplingRate(self._getInputSampling())
                 newTs.append(newTi)
