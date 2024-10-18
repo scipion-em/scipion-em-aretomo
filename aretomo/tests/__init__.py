@@ -59,7 +59,11 @@ testAcq079RefTAx.setTiltAxisAngle(84.5276)
 # Acquisition of TS_079 - Interpolated
 testAcq079Interp = testAcq079.clone()
 testAcq079Interp.setTiltAxisAngle(0.)
-# testAcq079Interp.setAccumDose(0.)  # Aretomo do dose-weighting by default
+# Acquisition of TS_079 - Interpolated and dose-weighted
+testAcq079InterpDW = testAcq079Interp.clone()
+testAcq079InterpDW.setAccumDose(0.)
+testAcq079InterpDW.setDoseInitial(0.)
+testAcq079InterpDW.setDosePerFrame(0.)
 
 # Acquisition of TS_145
 testAcq145 = testAcq.clone()
@@ -73,7 +77,11 @@ testAcq145RefTAx.setTiltAxisAngle(84.1236)
 # Acquisition of TS_145 - Interpolated
 testAcq145Interp = testAcq145.clone()
 testAcq145Interp.setTiltAxisAngle(0.)
-# testAcq145Interp.setAccumDose(0.)  # Aretomo do dose-weighting by default
+# Acquisition of TS_145 - Interpolated and dose-weighted
+testAcq145InterpDW = testAcq145Interp.clone()
+testAcq145InterpDW.setAccumDose(0.)
+testAcq145InterpDW.setDoseInitial(0.)
+testAcq145InterpDW.setDosePerFrame(0.)
 
 
 class DataSetEmpiar10453(Enum):
@@ -93,6 +101,8 @@ class DataSetEmpiar10453(Enum):
                            TS_145: testAcq145RefTAx}
     testTsInterpAcqDict = {TS_079: testAcq079Interp,
                            TS_145: testAcq145Interp}
+    testTsInterpDWAcqDict = {TS_079: testAcq079InterpDW,
+                             TS_145: testAcq145InterpDW}
 
     @classmethod
     def getTestTsDims(cls, binningFactor=1, nImgs=-1):

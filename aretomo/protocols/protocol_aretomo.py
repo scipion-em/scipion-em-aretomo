@@ -362,7 +362,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         # Generate angle file
         angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
-        self._generateTltFile(ts, angleFilePath)
+        ts.generateTltFile(angleFilePath)
 
         if not self.skipAlign and self.alignZfile.hasValue():
             alignZfile = self.alignZfile.get()
@@ -472,9 +472,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         ts = self.getTsFromTsId(tsId)
         extraPrefix = self._getExtraPath(tsId)
+        AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"))
+        indexDict = self._getIndexAssignDict(ts)
+        finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
+        for newInd, origInd in indexDict.items():
+            secNum = newInd - 1  # Indices begin in 1, sects in 0
+            if secNum in AretomoAln.sections:
+                finalIndsAliDict[origInd] = AretomoAln.sections.index(secNum)
+
+        finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
+        alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
         if not (self.makeTomo and self.skipAlign):
-            AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"))
             # We found the following behavior to be happening sometimes (non-systematically):
             # It can be observed that the tilt angles are badly set for the non-excluded views:
             #
@@ -507,8 +516,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self.badTsAliMsg.set(outMsg)
                 self._store(self.badTsAliMsg)
                 return
-
-            alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
         if self.makeTomo:
             # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
@@ -564,15 +571,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 accumDoseList = []
                 initialDoseList = []
                 tiltAngleList = []
-                for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
-                    if secNum in AretomoAln.sections:
+                for i, tiltImage in enumerate(ts.iterItems(orderBy=TiltImage.INDEX_FIELD)):
+                    ind = i + 1
+
+                    if ind in finalInds:
                         newTi = TiltImage()
                         newTi.copyInfo(tiltImage, copyId=False, copyTM=False)
-
                         acqTi = tiltImage.getAcquisition()
                         acqTi.setTiltAxisAngle(0.)
 
-                        secIndex = AretomoAln.sections.index(secNum)
+                        secIndex = finalIndsAliDict[ind]
                         tiltAngle = AretomoAln.tilt_angles[secIndex]
                         tiltAngleList.append(tiltAngle)
                         newTi.setTiltAngle(tiltAngle)
@@ -585,13 +593,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         if self.doDW.get():
                             acqTi.setDoseInitial(0.)
                             acqTi.setAccumDose(0.)
+                            acqTi.setDosePerFrame(0.)
                             newTi.setAcquisition(acqTi)
                         else:
                             initialDoseList.append(acqTi.getDoseInitial())
                             accumDoseList.append(acqTi.getAccumDose())
 
                     else:
-                        excludedViewsList.append(secNum + 1)
+                        excludedViewsList.append(ind)
                 if excludedViewsList:
                     newTs.setAnglesCount(len(newTs))
                     prevMsg = self.excludedViewsMsg.get() if self.excludedViewsMsg.get() else ''
@@ -604,6 +613,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if self.doDW.get():
                     acq.setDoseInitial(0.)
                     acq.setAccumDose(0.)
+                    acq.setDosePerFrame(0.)
                 else:
                     # The interp TS initial and accumulated dose values may need to be updated in the interpolated
                     # TS if DW is not applied and there are excluded views
@@ -637,17 +647,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             newTs.setAlignment2D()
             outputSetOfTiltSeries.append(newTs)
 
-            for secNum, tiltImage in enumerate(ts.iterItems(orderBy="_index")):
+            for i, tiltImage in enumerate(ts.iterItems(orderBy=TiltImage.INDEX_FIELD)):
                 newTi = tiltImage.clone()
                 newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
                 transform = Transform()
+                ind = i + 1
 
-                if secNum not in AretomoAln.sections:
-                    newTi.setEnabled(False)
-                    transform.setMatrix(np.identity(3))
-                else:
-                    # set the tilt angles
-                    secIndex = AretomoAln.sections.index(secNum)
+                if ind in finalInds:
+                    # Set the tilt angles
+                    secIndex = finalIndsAliDict[ind]
                     acq = tiltImage.getAcquisition()
                     newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
                     acq.setTiltAxisAngle(AretomoAln.tilt_axes[secIndex])
@@ -659,6 +667,27 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
                         f"{AretomoAln.tilt_angles[secIndex]}")
                     transform.setMatrix(m)
+                else:
+                    newTi.setEnabled(False)
+                    transform.setMatrix(np.identity(3))
+
+                # if secNum not in AretomoAln.sections:
+                #     newTi.setEnabled(False)
+                #     transform.setMatrix(np.identity(3))
+                # else:
+                #     # set the tilt angles
+                #     secIndex = AretomoAln.sections.index(secNum)
+                #     acq = tiltImage.getAcquisition()
+                #     newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
+                #     acq.setTiltAxisAngle(AretomoAln.tilt_axes[secIndex])
+                #     newTi.setAcquisition(acq)
+                #
+                #     # set Transform
+                #     m = alignmentMatrix[:, :, secIndex]
+                #     self.debug(
+                #         f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
+                #         f"{AretomoAln.tilt_angles[secIndex]}")
+                #     transform.setMatrix(m)
 
                 newTi.setTransform(transform)
                 newTi.setSamplingRate(self._getInputSampling())
@@ -742,7 +771,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            self.badTomoRecMsg.get())
 
         if self._saveInterpolated() and not self.makeTomo and self.excludedViewsMsg.get():
-            summary.append("*Interpolated TS stacks have a few dark tilt images removed.*\n" +
+            summary.append("*Interpolated TS stacks have a few tilt images removed (could be because "
+                           "they were marked in the input tilt-series as disabled or because of "
+                           "AreTomo's dark tolerance threshold).*\n" +
                            self.excludedViewsMsg.get())
 
         return summary
@@ -893,23 +924,23 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         x, y, z, _ = ih.getDimensions(fn)
         return x, y, z
 
-    def _generateTltFile(self, ts: TiltSeries,
-                         outputFn: os.PathLike) -> None:
-        """ Generate .tlt file with tilt angles and accumulated dose. """
-        angleList = []
-        aretomo2 = Plugin.getActiveVersion() != V1_3_4
-
-        for ti in ts.iterItems(orderBy="_index"):
-            acqOrder = ti.getAcquisitionOrder()
-            accDose = ti.getAcquisition().getAccumDose()
-            tAngle = ti.getTiltAngle()
-            angleList.append((tAngle, acqOrder if aretomo2 else accDose))
-
-        with open(outputFn, 'w') as f:
-            if self.doDW:
-                f.writelines(f"{i[0]:0.3f} {i[1]}\n" for i in angleList)
-            else:
-                f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
+    # def _generateTltFile(self, ts: TiltSeries,
+    #                      outputFn: os.PathLike) -> None:
+    #     """ Generate .tlt file with tilt angles and accumulated dose. """
+    #     angleList = []
+    #     aretomo2 = Plugin.getActiveVersion() != V1_3_4
+    #
+    #     for ti in ts.iterItems(orderBy="_index"):
+    #         acqOrder = ti.getAcquisitionOrder()
+    #         accDose = ti.getAcquisition().getAccumDose()
+    #         tAngle = ti.getTiltAngle()
+    #         angleList.append((tAngle, acqOrder if aretomo2 else accDose))
+    #
+    #     with open(outputFn, 'w') as f:
+    #         if self.doDW:
+    #             f.writelines(f"{i[0]:0.3f} {i[1]}\n" for i in angleList)
+    #         else:
+    #             f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 
     def _saveInterpolated(self) -> bool:
         return self.saveStack
@@ -935,3 +966,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
     def genTmpTsFile(self, tsId, tsFn):
         return self.getFilePath(tsFn, self._getTmpPath(tsId), ".mrc")
+
+    @staticmethod
+    def _getIndexAssignDict(ts: TiltSeries) -> dict:
+        """It generates a dictionary of {key: value} = {indInRestackedTs: indInOriginalTs} that will
+        be used to get the excluded views after the re-stacking process in case there are excluded views in
+        the input tilt-series (so they are re-stacked in the convert input step) and the automatically excluded
+        views because of the dark tolerance threshold of AreTomo, that are excluded considering the indices of
+        the re-stacked tilt-series, but the output non-interpolated tilt-series must be referred to the
+        input tilt-series."""
+        indexDict = {}
+        newInd = 1
+        for ti in ts.iterItems():
+            if ti.isEnabled():
+                indexDict[newInd] = ti.getIndex()
+                newInd += 1
+        return indexDict

@@ -31,7 +31,7 @@ from pyworkflow.tests import DataSet, setupTestProject
 from tomo.protocols import ProtImportTs
 
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
-from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145, testAcq079Interp
+from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145
 
 from ..protocols.protocol_aretomo import (ProtAreTomoAlignRecon, OUT_TS, OUT_TOMO,
                                           OUT_TS_ALN, OUT_CTFS)
@@ -39,12 +39,12 @@ from ..protocols.protocol_aretomo import (ProtAreTomoAlignRecon, OUT_TS, OUT_TOM
 
 class TestAreTomo2Base(TestBaseCentralizedLayer):
     ds = None
-    importedTs = None
     unbinnedSRate = DataSetEmpiar10453.unbinnedPixSize.value
     nAngles = DataSetEmpiar10453.nAngles.value
     tsAcqDict = DataSetEmpiar10453.testTsAcqDict.value
     tsRefTAxAcqDict = DataSetEmpiar10453.testTsRefTAxAcqDict.value
     tsInterpAcqDict = DataSetEmpiar10453.testTsInterpAcqDict.value
+    tsInterpDWAcqDict = DataSetEmpiar10453.testTsInterpDWAcqDict.value
     nTiltSeries = len(tsAcqDict)
 
     alignZ = 800
@@ -53,34 +53,18 @@ class TestAreTomo2Base(TestBaseCentralizedLayer):
 
     expectedTomoDims = [1022, 1440, 300]
 
+    excludedViewsDict = {
+        TS_079: [0, 1, 38, 40],
+        TS_145: [0, 1, 2, 39, 40]
+    }
+
+
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         cls.ds = DataSet.getDataSet(EMDB_10453)
         cls.expectedDimsTs = DataSetEmpiar10453.getTestTsDims(nImgs=cls.nAngles)
         cls.expectedOriginShifts = list(np.array(cls.expectedTomoDims) / -2 * cls.unbinnedSRate * cls.binFactor)
-        cls._runPreviousProtocols()
-        # cls.inTsSet = cls._runImportTs()
-
-        # Acquisition of the interpolated TS: aretomo allows to dose-weight the TS, so if the interpolated TS is
-        # generated and the dose-weight option is active, then the dose is set to 0 to avoid double dose correction
-        # if using the interpolated TS for the PPPT. Also, the tilt axis angle should be 0 as the tilt series is
-        # aligned
-        # Acquisition of TS_03 interpolated with DW
-        # testAcq03InterpDw = DataSetRe4STATuto.testAcq03Interp.value.clone()
-        # testAcq03InterpDw.setAccumDose(0)
-        # Acquisition of TS_54 interpolated with DW
-        # testAcq54InterpDw = DataSetRe4STATuto.testAcq54Interp.value.clone()
-        # testAcq54InterpDw.setAccumDose(0)
-        # Tilt series interpolated acq dict wih DW
-        # cls.tsAcqInterpDwDict = {
-        #     TS_03: testAcq03InterpDw,
-        #     TS_54: testAcq54InterpDw
-        # }
-
-    @classmethod
-    def _runPreviousProtocols(cls):
-        cls.importedTs = cls._runImportTs()
 
     @classmethod
     def _runImportTs(cls):
@@ -93,61 +77,125 @@ class TestAreTomo2Base(TestBaseCentralizedLayer):
         tsImported = getattr(protTsImport, protTsImport.OUTPUT_NAME, None)
         return tsImported
 
+    @classmethod
+    def _excludeTsSetViews(cls, tsSet):
+        tsList = [ts.clone(ignoreAttrs=[]) for ts in tsSet]
+        for ts in tsList:
+            cls._excludeTsViews(tsSet, ts, cls.excludedViewsDict[ts.getTsId()])
+
+    @staticmethod
+    def _excludeTsViews(tsSet, ts, excludedViewsList):
+        tiList = [ti.clone() for ti in ts]
+        for i, ti in enumerate(tiList):
+            if i in excludedViewsList:
+                ti._objEnabled = False
+                ts.update(ti)
+        ts.write()
+        tsSet.update(ts)
+        tsSet.write()
+
 
 class TestAreTomo2(TestAreTomo2Base):
 
     def test_align_01(self):
-        print(magentaStr("\n==> Testing AreTomo:"
-                         "\n\t- Align only"
-                         "\n\t- Generate also the interpolated TS"
-                         "\n\t- Dose weighting"
-                         "\n\t- No views are excluded"
-                         "\n\t- CTF not generated"))
-
         # Expected values
-        # Dose weighting = True in this test
-        testAcq079 = DataSetEmpiar10453.testAcq079Interp.value.clone()
-        testAcq145 = DataSetEmpiar10453.testAcq145Interp.value.clone()
-        testAcq079.setAccumDose(0.)
-        testAcq145.setAccumDose(0.)
-        testInterpDWAcqDict = {TS_079: testAcq079,
-                               TS_145: testAcq145}
-
         expectedDimsInterpTs = DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
                                                                       nImgs=self.nAngles)
+        # Run the test
+        importedTs = self._runImportTs()
+        self._run_test_align_01(importedTs, expectedDimsInterpTs)
+
+    def test_align_01_excluded_views(self):
+        # Expected values
+        nImgs_079 = self.nAngles - len(self.excludedViewsDict[TS_079])
+        nImgs_145 = self.nAngles - len(self.excludedViewsDict[TS_145])
+        expectedDimsInterpTs = {
+            TS_079: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor, nImgs=nImgs_079),
+            TS_145: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor, nImgs=nImgs_145),
+        }
+        testInterpAnglesCount = {
+            TS_079: nImgs_079,
+            TS_145: nImgs_145
+        }
+        # The refine tilt axis angles (updated to the rot angle) are different from expected in the test dataset
+        # because of the excluded views
+        testAcq = self.tsRefTAxAcqDict
+        testAcq[TS_079].setTiltAxisAngle(85.4368)
+        testAcq[TS_145].setTiltAxisAngle(84.7095)
+        # Also, the interpolated TS min and max angles may have changed because of the image removal
+        testInterpAcq = self.tsInterpDWAcqDict
+        testInterpAcq[TS_079].setAngleMin(-54.01)
+        testInterpAcq[TS_079].setAngleMax(56.99)
+        testInterpAcq[TS_145].setAngleMin(-51.01)
+        testInterpAcq[TS_145].setAngleMax(53.98)
+
+        # Run the test
+        importedTs = self._runImportTs()
+        self._excludeTsSetViews(importedTs)  # Exclude some views at metadata level
+        self._run_test_align_01(importedTs, expectedDimsInterpTs,
+                                testAcq=testAcq,
+                                testInterpAcq=testInterpAcq,
+                                testInterpAnglesCount=testInterpAnglesCount,
+                                eV=True)
+
+    def _run_test_align_01(self, inTsSet, testInterpDims, testAcq=None, testDims=None,
+                           testInterpAcq=None, testInterpAnglesCount=None, eV=False):
+        msg = ("\n==> Testing AreTomo:"
+               "\n\t- Align only"
+               "\n\t- Generate also the interpolated TS"
+               "\n\t- Dose weighting"
+               "\n\t- No views are excluded by Aretomo"
+               "\n\t- CTF not generated")
+        eVLabel = ''
+        if eV:
+            msg += "\n\t- Input set of TS contains excluded views"
+            eVLabel = ', eV'
+        print(magentaStr(msg))
+
+        if not testAcq:
+            testAcq = self.tsRefTAxAcqDict
+        if not testDims:
+            testDims = self.expectedDimsTs
+        if not testInterpAcq:
+            testInterpAcq = self.tsInterpDWAcqDict
+        if not testInterpAnglesCount:
+            testInterpAnglesCount = self.nAngles
 
         # Run the protocol
         prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=self.importedTs,
+                                inputSetOfTiltSeries=inTsSet,
                                 makeTomo=False,
                                 doDW=True,
                                 doEstimateCtf=False,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
-                                darkTol=0.1)
-        prot.setObjLabel('Align only, no CTF')
+                                darkTol=0)
+        prot.setObjLabel(f'Align only, no CTF{eVLabel}')
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
         # Tilt series
+        excludedViews = self.excludedViewsDict if eV else None
         self.checkTiltSeries(getattr(prot, OUT_TS, None),
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
-                             expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=self.tsRefTAxAcqDict,
+                             expectedDimensions=testDims,
+                             testAcqObj=testAcq,
                              hasAlignment=True,
                              alignment=ALIGN_2D,
-                             anglesCount=self.nAngles)
+                             anglesCount=self.nAngles,
+                             excludedViewsDict=excludedViews)
         # Interpolated TS
         self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate * self.binFactor,
-                             expectedDimensions=expectedDimsInterpTs,
-                             testAcqObj=testInterpDWAcqDict,
-                             anglesCount=self.nAngles,
+                             expectedDimensions=testInterpDims,
+                             testAcqObj=testInterpAcq,
+                             anglesCount=testInterpAnglesCount,
                              isInterpolated=True)
         # CTFs
         self.assertIsNone(getattr(prot, OUT_CTFS, None))
+
 
     def test_align_02(self):
         print(magentaStr("\n==> Testing AreTomo:"
@@ -185,8 +233,9 @@ class TestAreTomo2(TestAreTomo2Base):
                            TS_145:acq145}
 
         # Run the protocol
+        importedTs = self._runImportTs()
         prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=self.importedTs,
+                                inputSetOfTiltSeries=importedTs,
                                 makeTomo=False,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
@@ -227,8 +276,9 @@ class TestAreTomo2(TestAreTomo2Base):
                          "\n\t- CTF generated"))
 
         # Run the protocol
+        importedTs = self._runImportTs()
         prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=self.importedTs,
+                                inputSetOfTiltSeries=importedTs,
                                 tomoThickness=self.unbinnedThk,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
