@@ -41,11 +41,11 @@ from pyworkflow.object import Set, String
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
-from pwem.objects import Transform
+from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
-                          SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries)
+                          SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile
@@ -697,9 +697,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 newCTFTomoSeries.setTsId(tsId)
                 outputCtfs.append(newCTFTomoSeries)
 
-                outputFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
-                ap = AretomoCtfParser(self)
-                ap.parseTSDefocusFile(newTs, outputFile, newCTFTomoSeries)
+                aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, "_ctf.txt")
+                psdFile = pwutils.replaceExt(aretomoCtfFile, 'mrc')
+                psdFile = psdFile if os.path.exists(psdFile) else None
+                ctfResult = AretomoCtfParser.readAretomoCtfOutput(aretomoCtfFile)
+
+                for i, tiltImage in enumerate(ts.iterItems()):
+                    ctf = CTFModel()
+                    ind = i + 1
+                    if ind in finalInds:
+                        secIndex = finalIndsAliDict[ind]
+                        AretomoCtfParser._getCtfTi(ctf, ctfResult, item=secIndex, psdFile=psdFile)
+                        newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+                    else:
+                        ctf.setWrongDefocus()
+                        newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+                        newCtfTomo.setEnabled(False)
+
+                    newCtfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
+                    newCTFTomoSeries.append(newCtfTomo)
 
                 outputCtfs.update(newCTFTomoSeries)
                 outputCtfs.write()

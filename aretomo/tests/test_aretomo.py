@@ -26,7 +26,7 @@
 import numpy as np
 
 from pwem import ALIGN_2D
-from pyworkflow.utils import magentaStr
+from pyworkflow.utils import magentaStr, blueStr
 from pyworkflow.tests import DataSet, setupTestProject
 from tomo.protocols import ProtImportTs
 
@@ -58,9 +58,10 @@ class TestAreTomo2Base(TestBaseCentralizedLayer):
         TS_145: [0, 1, 2, 39, 40]
     }
 
-
     @classmethod
     def setUpClass(cls):
+        print(blueStr('===> TESTS INFORMATION <==='
+                      '\nTests originally designed and passing with Aretomo2-1-1-3, Ubuntu 22.04, cuda-12.1'))
         setupTestProject(cls)
         cls.ds = DataSet.getDataSet(EMDB_10453)
         cls.expectedDimsTs = DataSetEmpiar10453.getTestTsDims(nImgs=cls.nAngles)
@@ -170,7 +171,7 @@ class TestAreTomo2(TestAreTomo2Base):
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
                                 darkTol=0)
-        prot.setObjLabel(f'Align only, no CTF{eVLabel}')
+        prot.setObjLabel(f'Align only, no CTF, DW{eVLabel}')
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
@@ -196,18 +197,10 @@ class TestAreTomo2(TestAreTomo2Base):
         # CTFs
         self.assertIsNone(getattr(prot, OUT_CTFS, None))
 
-
     def test_align_02(self):
-        print(magentaStr("\n==> Testing AreTomo:"
-                         "\n\t- Align only"
-                         "\n\t- Generate also the interpolated TS"
-                         "\n\t- No dose weighting"
-                         "\n\t- Some views are excluded"
-                         "\n\t- CTF generated"))
-
         # Expected values
-        exludedViews = {TS_145: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-                        TS_079: [40]}
+        excludedViews = {TS_145: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+                         TS_079: [40]}
         nAnglesDict = {TS_145: 27,
                        TS_079: 40}
         expectedDimsTsInterp = {TS_079: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
@@ -227,20 +220,98 @@ class TestAreTomo2(TestAreTomo2Base):
 
         acq145 = tsAcqDictInterp[TS_145]
         acq145.setAngleMin(-18.01)
+        acq145.setAngleMax(59.99)
         acq145.setAccumDose(138.15)
 
         tsAcqDictInterp = {TS_079: acq079,
-                           TS_145:acq145}
+                           TS_145: acq145}
+
+        # Run the test
+        importedTs = self._runImportTs()
+        self._run_test_align_02(inTsSet=importedTs,
+                                testAcq=tsAcqDict,
+                                excludedViews=excludedViews,
+                                testInterpDims=expectedDimsTsInterp,
+                                testInterpAcq=tsAcqDictInterp,
+                                testInterpAnglesCount=nAnglesDict)
+
+    def test_align_02_excluded_views(self):
+        """The input TS have some excluded views, and AreTomo's dark tolerance threshold will remove some
+        views, too:
+            - TS_079:
+                * Input views marked to be excluded: [0, 1, 38, 40]
+                * Views that will be removed by AreTomo: []
+            - TS_145:
+                * Input views marked to be excluded: [0, 1, 2, 39, 40]
+                * Views that will be removed by AreTomo, referred to:
+                    -> Re-stacked TS: [0, 1, 2, 3, 4, 5, 6]
+                    -> Input TS: [3, 4, 5, 6, 7, 8, 9]
+        """
+        # Expected values
+        excludedViews = {TS_145: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 39, 40],
+                         TS_079: [0, 1, 38, 40]}
+        nImgs_079 = self.nAngles - len(excludedViews[TS_079])
+        nImgs_145 = self.nAngles - len(excludedViews[TS_145])
+        nAnglesDict = {TS_145: nImgs_145,
+                       TS_079: nImgs_079}
+        expectedDimsTsInterp = {TS_079: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
+                                                                               nImgs=nAnglesDict[TS_079]),
+                                TS_145: DataSetEmpiar10453.getTestInterpTsDims(binningFactor=self.binFactor,
+                                                                               nImgs=nAnglesDict[TS_145])}
+        # Update the corresponding acquisition dictionary with the refined tilt axis angle values
+        # Note: they're different from in the previous test because of the views exclusion
+        tsAcqDict = self.tsAcqDict
+        tsAcqDict[TS_079].setTiltAxisAngle(85.4368)
+        tsAcqDict[TS_145].setTiltAxisAngle(84.1337)
+        # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
+        # accumulated values will be updated in the interpolated TS
+        tsAcqDictInterp = self.tsInterpAcqDict
+        acq079 = tsAcqDictInterp[TS_079]
+        acq079.setAngleMin(-54.01)
+        acq079.setAngleMax(56.99)
+        acq079.setAccumDose(135.16)
+
+        acq145 = tsAcqDictInterp[TS_145]
+        acq145.setAngleMin(-30.01)
+        acq145.setAngleMax(53.98)
+        acq145.setAccumDose(123.98)
+
+        tsAcqDictInterp = {TS_079: acq079,
+                           TS_145: acq145}
+
+        # Run the test
+        importedTs = self._runImportTs()
+        self._excludeTsSetViews(importedTs)  # Exclude some views at metadata level
+        self._run_test_align_02(inTsSet=importedTs,
+                                testAcq=tsAcqDict,
+                                excludedViews=excludedViews,
+                                testInterpDims=expectedDimsTsInterp,
+                                testInterpAcq=tsAcqDictInterp,
+                                testInterpAnglesCount=nAnglesDict,
+                                eV=True)
+
+    def _run_test_align_02(self, inTsSet, testAcq, excludedViews, testInterpDims,
+                           testInterpAcq, testInterpAnglesCount, eV=False):
+        msg = ("\n==> Testing AreTomo:"
+               "\n\t- Align only"
+               "\n\t- Generate also the interpolated TS"
+               "\n\t- No dose weighting"
+               "\n\t- Some views are excluded"
+               "\n\t- CTF generated")
+        eVLabel = ''
+        if eV:
+            msg += "\n\t- Input set of TS contains excluded views"
+            eVLabel = ', eV'
+        print(magentaStr(msg))
 
         # Run the protocol
-        importedTs = self._runImportTs()
         prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=importedTs,
+                                inputSetOfTiltSeries=inTsSet,
                                 makeTomo=False,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
                                 darkTol=0.8)
-        prot.setObjLabel('Align only, exclude views')
+        prot.setObjLabel(f'Align only, exclude views{eVLabel}')
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
@@ -249,45 +320,73 @@ class TestAreTomo2(TestAreTomo2Base):
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
                              expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=tsAcqDict,
+                             testAcqObj=testAcq,
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles,
-                             excludedViewsDict=exludedViews)
+                             excludedViewsDict=excludedViews)
 
         # Interpolated TS
         self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate * self.binFactor,
-                             # Protocol sets the bin factor to 2 by default
-                             expectedDimensions=expectedDimsTsInterp,
-                             testAcqObj=tsAcqDictInterp,
-                             anglesCount=nAnglesDict,
+                             expectedDimensions=testInterpDims,
+                             testAcqObj=testInterpAcq,
+                             anglesCount=testInterpAnglesCount,
                              isInterpolated=True)
         # CTFs
-        self._checkCTFs(getattr(prot, OUT_CTFS, None), excludedViewsDict=exludedViews)
+        self._checkCTFs(getattr(prot, OUT_CTFS, None), excludedViewsDict=excludedViews)
 
     def test_alignAndReconstruct(self):
-        print(magentaStr("\n==> Testing AreTomo:"
-                         "\n\t- Align and reconstruct"
-                         "\n\t- Interpolated TS not generated"
-                         "\n\t- No dose weighting"
-                         "\n\t- No views are excluded"
-                         "\n\t- CTF generated"))
+        # Run the protocol
+        importedTs = self._runImportTs()
+        self._run_test_alignAndReconstruct(importedTs)
+
+
+    def test_alignAndReconstruct_excluded_views(self):
+        # Expected values
+        # The refine tilt axis angles (updated to the rot angle) are different from expected in the test dataset
+        # because of the excluded views
+        testAcq = self.tsRefTAxAcqDict
+        testAcq[TS_079].setTiltAxisAngle(85.4368)
+        testAcq[TS_145].setTiltAxisAngle(84.7095)
 
         # Run the protocol
         importedTs = self._runImportTs()
+        self._excludeTsSetViews(importedTs)  # Exclude some views at metadata level
+        self._run_test_alignAndReconstruct(importedTs, eV=True)
+
+    def _checkCTFs(self, ctfSet, excludedViewsDict=None):
+        self.checkCTFs(ctfSet,
+                       expectedSetSize=self.nTiltSeries,
+                       excludedViewsDict=excludedViewsDict,
+                       expectedPsdFile=True)
+
+    def _run_test_alignAndReconstruct(self, inTsSet, eV=False):
+        msg = ("\n==> Testing AreTomo:"
+               "\n\t- Align and reconstruct"
+               "\n\t- Interpolated TS not generated"
+               "\n\t- No dose weighting"
+               "\n\t- No views are excluded"
+               "\n\t- CTF generated")
+        eVLabel = ''
+        if eV:
+            msg += "\n\t- Input set of TS contains excluded views"
+            eVLabel = ', eV'
+        print(magentaStr(msg))
+
         prot = self.newProtocol(ProtAreTomoAlignRecon,
-                                inputSetOfTiltSeries=importedTs,
+                                inputSetOfTiltSeries=inTsSet,
                                 tomoThickness=self.unbinnedThk,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
                                 darkTol=0.1)
-        prot.setObjLabel('Align & rec')
+        prot.setObjLabel(f'Align & rec{eVLabel}')
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
         # Tilt series
+        excludedViews = self.excludedViewsDict if eV else None
         self.checkTiltSeries(getattr(prot, OUT_TS, None),
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
@@ -295,10 +394,11 @@ class TestAreTomo2(TestAreTomo2Base):
                              testAcqObj=self.tsRefTAxAcqDict,
                              hasAlignment=True,
                              alignment=ALIGN_2D,
-                             anglesCount=self.nAngles)
+                             anglesCount=self.nAngles,
+                             excludedViewsDict=excludedViews)
 
         # CTFs
-        self._checkCTFs(getattr(prot, OUT_CTFS, None))
+        self._checkCTFs(getattr(prot, OUT_CTFS, None), excludedViewsDict=excludedViews)
 
         # Tomograms
         self.checkTomograms(getattr(prot, OUT_TOMO, None),
@@ -306,9 +406,3 @@ class TestAreTomo2(TestAreTomo2Base):
                             expectedSRate=self.unbinnedSRate * self.binFactor,
                             expectedDimensions=self.expectedTomoDims,
                             expectedOriginShifts=self.expectedOriginShifts)
-
-    def _checkCTFs(self, ctfSet, excludedViewsDict=None):
-        self.checkCTFs(ctfSet,
-                       expectedSetSize=self.nTiltSeries,
-                       excludedViewsDict=excludedViewsDict,
-                       expectedPsdFile=True)
