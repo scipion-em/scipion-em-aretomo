@@ -404,6 +404,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 '-PixSize': ts.getSamplingRate(),
                 '-Kv': acq.getVoltage(),
                 '-DarkTol': self.darkTol.get(),
+                '-AmpContrast': acq.getAmplitudeContrast(),
                 '-Gpu': '%(GPU)s'
             }
 
