@@ -463,10 +463,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self.error('Aretomo execution failed for tsId %s -> %s' % (tsId, e))
 
     def createOutputStep(self, tsId: str, tsFn: str):
-        if tsId in self._failedTsList:
-            self.createOutputFailedTs(tsId)
-        else:
-            self.createOutputTs(tsId, tsFn)
+        with self._lock:
+            if tsId in self._failedTsList:
+                self.createOutputFailedTs(tsId)
+            else:
+                self.createOutputTs(tsId, tsFn)
+            for outputName in self._possibleOutputs.keys():
+                output = getattr(self, outputName, None)
+                if output:
+                    output.close()
 
     def createOutputTs(self, tsId: str, tsFn: str):
         self.info(f'------- createOutputStep ts_id: {tsId}')
@@ -922,24 +927,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         ih = ImageHandler()
         x, y, z, _ = ih.getDimensions(fn)
         return x, y, z
-
-    # def _generateTltFile(self, ts: TiltSeries,
-    #                      outputFn: os.PathLike) -> None:
-    #     """ Generate .tlt file with tilt angles and accumulated dose. """
-    #     angleList = []
-    #     aretomo2 = Plugin.getActiveVersion() != V1_3_4
-    #
-    #     for ti in ts.iterItems(orderBy="_index"):
-    #         acqOrder = ti.getAcquisitionOrder()
-    #         accDose = ti.getAcquisition().getAccumDose()
-    #         tAngle = ti.getTiltAngle()
-    #         angleList.append((tAngle, acqOrder if aretomo2 else accDose))
-    #
-    #     with open(outputFn, 'w') as f:
-    #         if self.doDW:
-    #             f.writelines(f"{i[0]:0.3f} {i[1]}\n" for i in angleList)
-    #         else:
-    #             f.writelines(f"{i[0]:0.3f}\n" for i in angleList)
 
     def _saveInterpolated(self) -> bool:
         return self.saveStack
