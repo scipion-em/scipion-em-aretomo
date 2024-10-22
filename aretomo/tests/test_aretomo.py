@@ -23,6 +23,8 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import copy
+
 import numpy as np
 
 from pwem import ALIGN_2D
@@ -120,11 +122,11 @@ class TestAreTomo2(TestAreTomo2Base):
         }
         # The refine tilt axis angles (updated to the rot angle) are different from expected in the test dataset
         # because of the excluded views
-        testAcq = self.tsRefTAxAcqDict
+        testAcq = copy.deepcopy(self.tsRefTAxAcqDict)
         testAcq[TS_079].setTiltAxisAngle(85.4368)
         testAcq[TS_145].setTiltAxisAngle(84.7095)
         # Also, the interpolated TS min and max angles may have changed because of the image removal
-        testInterpAcq = self.tsInterpDWAcqDict
+        testInterpAcq = copy.deepcopy(self.tsInterpDWAcqDict)
         testInterpAcq[TS_079].setAngleMin(-54.01)
         testInterpAcq[TS_079].setAngleMax(56.99)
         testInterpAcq[TS_145].setAngleMin(-51.01)
@@ -209,12 +211,12 @@ class TestAreTomo2(TestAreTomo2Base):
                                                                                nImgs=nAnglesDict[TS_145])}
         # Update the corresponding acquisition dictionary with the refined tilt axis angle values
         # Note: they're different from in the previous test because of the views exclusion
-        tsAcqDict = self.tsAcqDict
+        tsAcqDict = copy.deepcopy(self.tsAcqDict)
         tsAcqDict[TS_079].setTiltAxisAngle(84.5478)
         tsAcqDict[TS_145].setTiltAxisAngle(84.0226)
         # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
         # accumulated values will be updated in the interpolated TS
-        tsAcqDictInterp = self.tsInterpAcqDict
+        tsAcqDictInterp = copy.deepcopy(self.tsInterpAcqDict)
         acq079 = tsAcqDictInterp[TS_079]
         acq079.setAngleMax(56.99)
 
@@ -260,12 +262,12 @@ class TestAreTomo2(TestAreTomo2Base):
                                                                                nImgs=nAnglesDict[TS_145])}
         # Update the corresponding acquisition dictionary with the refined tilt axis angle values
         # Note: they're different from in the previous test because of the views exclusion
-        tsAcqDict = self.tsAcqDict
+        tsAcqDict = copy.deepcopy(self.tsAcqDict)
         tsAcqDict[TS_079].setTiltAxisAngle(85.4368)
         tsAcqDict[TS_145].setTiltAxisAngle(84.1337)
         # Because some of the excluded views are at the end of the stack and DW is not applied in this test, the TS
         # accumulated values will be updated in the interpolated TS
-        tsAcqDictInterp = self.tsInterpAcqDict
+        tsAcqDictInterp = copy.deepcopy(self.tsInterpAcqDict)
         acq079 = tsAcqDictInterp[TS_079]
         acq079.setAngleMin(-54.01)
         acq079.setAngleMax(56.99)
@@ -347,14 +349,14 @@ class TestAreTomo2(TestAreTomo2Base):
         # Expected values
         # The refine tilt axis angles (updated to the rot angle) are different from expected in the test dataset
         # because of the excluded views
-        testAcq = self.tsRefTAxAcqDict
+        testAcq = copy.deepcopy(self.tsRefTAxAcqDict)
         testAcq[TS_079].setTiltAxisAngle(85.4368)
         testAcq[TS_145].setTiltAxisAngle(84.7095)
 
         # Run the protocol
         importedTs = self._runImportTs()
         self._excludeTsSetViews(importedTs)  # Exclude some views at metadata level
-        self._run_test_alignAndReconstruct(importedTs, eV=True)
+        self._run_test_alignAndReconstruct(importedTs, testAcq=testAcq, eV=True)
 
     def _checkCTFs(self, ctfSet, excludedViewsDict=None):
         self.checkCTFs(ctfSet,
@@ -362,7 +364,7 @@ class TestAreTomo2(TestAreTomo2Base):
                        excludedViewsDict=excludedViewsDict,
                        expectedPsdFile=True)
 
-    def _run_test_alignAndReconstruct(self, inTsSet, eV=False):
+    def _run_test_alignAndReconstruct(self, inTsSet, testAcq=None, eV=False):
         msg = ("\n==> Testing AreTomo:"
                "\n\t- Align and reconstruct"
                "\n\t- Interpolated TS not generated"
@@ -387,11 +389,12 @@ class TestAreTomo2(TestAreTomo2Base):
         # CHECK THE OUTPUTS
         # Tilt series
         excludedViews = self.excludedViewsDict if eV else None
+        expectedAcq = testAcq if testAcq else self.tsRefTAxAcqDict
         self.checkTiltSeries(getattr(prot, OUT_TS, None),
                              expectedSetSize=self.nTiltSeries,
                              expectedSRate=self.unbinnedSRate,
                              expectedDimensions=self.expectedDimsTs,
-                             testAcqObj=self.tsRefTAxAcqDict,
+                             testAcqObj=expectedAcq,
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles,
