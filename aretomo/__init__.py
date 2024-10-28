@@ -41,12 +41,12 @@ _references = ['Zheng2022']
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
     _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
-    _supportedVersions = [V1_0_0, V1_1_2, V1_1_3, V1_3_4]
+    _supportedVersions = [V1_1_3]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_0_0}',
+        cls._defineEmVar(ARETOMO_HOME, f'aretomo2-{V1_1_3}',
                          description="Root folder where aretomo was extracted. Is assumes "
                                      "binaries are under that folder/bin.",
                          var_type=VarTypes.FOLDER)
@@ -55,14 +55,9 @@ class Plugin(pwem.Plugin):
                        var_type=VarTypes.FOLDER)
 
         # Define the variable default value based on the guessed cuda version
-        cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB,
-                                           default="12.1")
+        cudaVersion = cls.guessCudaVersion(ARETOMO_CUDA_LIB, default="12.1")
 
-        version = cls.getActiveVersion()
-        if version == V1_3_4:
-            binaryName = f'AreTomo_{V1_3_4}_Cuda{cudaVersion.major}{cudaVersion.minor}_Feb22_2023'
-        else:
-            binaryName = f'AreTomo2_{version}_Cuda{cudaVersion.major}{cudaVersion.minor}'
+        binaryName = f'AreTomo2_{V1_1_3}_Cuda{cudaVersion.major}{cudaVersion.minor}'
 
         cls._defineVar(ARETOMO_BIN, binaryName,
                        description="Aretomo binary file to use. Should match the cuda pointed by %s. "
@@ -101,10 +96,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        for v in [V1_0_0, V1_1_2, V1_1_3]:
-            env.addPackage('aretomo2', version=v,
-                           tar=f"aretomo2-{v}.tgz",
-                           default=v == V1_0_0)
+            env.addPackage('aretomo2', version=V1_1_3,
+                           tar=f"aretomo2-{V1_1_3}.tgz",
+                           default=True)
 
-        env.addPackage('aretomo', version=V1_3_4,
-                       tar=f"aretomo_v{V1_3_4}.tgz")
