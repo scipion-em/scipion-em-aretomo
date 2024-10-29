@@ -246,11 +246,11 @@ class TestAreTomo2(TestAreTomo2Base):
             - TS_145:
                 * Input views marked to be excluded: [0, 1, 2, 39, 40]
                 * Views that will be removed by AreTomo, referred to:
-                    -> Re-stacked TS: [0, 1, 2, 3, 4, 5, 6]
-                    -> Input TS: [3, 4, 5, 6, 7, 8, 9]
+                    -> Re-stacked TS: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+                    -> Input TS: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
         """
         # Expected values
-        excludedViews = {TS_145: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 39, 40],
+        excludedViews = {TS_145: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 39, 40],
                          TS_079: [0, 1, 38, 40]}
         nImgs_079 = self.nAngles - len(excludedViews[TS_079])
         nImgs_145 = self.nAngles - len(excludedViews[TS_145])
@@ -274,7 +274,7 @@ class TestAreTomo2(TestAreTomo2Base):
         acq079.setAccumDose(135.16)
 
         acq145 = tsAcqDictInterp[TS_145]
-        acq145.setAngleMin(-30.01)
+        acq145.setAngleMin(-18.01)
         acq145.setAngleMax(53.98)
         acq145.setAccumDose(123.98)
 

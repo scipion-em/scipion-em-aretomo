@@ -348,6 +348,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     def convertInputStep(self, tsId: str, tsFn: str):
         self.info(f'------- convertInputStep ts_id: {tsId}')
         ts = self.getTsFromTsId(tsId)
+        presentAcqOrders = ts.getTsPresentAcqOrders()
 
         extraPrefix = self._getExtraPath(tsId)
         tmpPrefix = self._getTmpPath(tsId)
@@ -358,11 +359,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         outputTsFileName = self.getFilePath(tsFn, tmpPrefix, ".mrc")
         rotationAngle = ts.getAcquisition().getTiltAxisAngle()
         doSwap = 45 < abs(rotationAngle) < 135
-        ts.applyTransform(outputTsFileName, swapXY=doSwap)
+        ts.applyTransform(outputTsFileName, swapXY=doSwap, presentAcqOrders=presentAcqOrders)
 
         # Generate angle file
         angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
-        ts.generateTltFile(angleFilePath)
+        ts.generateTltFile(angleFilePath, presentAcqOrders=presentAcqOrders)
 
         if not self.skipAlign and self.alignZfile.hasValue():
             alignZfile = self.alignZfile.get()
