@@ -2,6 +2,7 @@
  Users:
   - Add input tilt-series excluded views management.
   - Fix: amplitude contrast is read from the tilt-series metadata and passed to AreTomo.
+  - do not support old aretomo versions
  Developers:
   - Write new tests with a better characterized test dataset.
   - Tests renewed with a better adapted (real dark frames) test dataset and with cases of TS with excluded views.

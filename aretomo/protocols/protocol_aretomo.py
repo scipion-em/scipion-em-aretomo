@@ -192,22 +192,21 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "High frequencies are enhanced to alleviate the attenuation "
                            "due to interpolation.")
 
-        if Plugin.getActiveVersion() != V1_3_4:
-            form.addSection(label='CTF')
-            form.addParam('doEstimateCtf', params.BooleanParam,
-                          default=True, label='Estimate the CTF?',
-                          condition='not (skipAlign and makeTomo)')
+        form.addSection(label='CTF')
+        form.addParam('doEstimateCtf', params.BooleanParam,
+                      default=True, label='Estimate the CTF?',
+                      condition='not (skipAlign and makeTomo)')
 
-            form.addParam('doPhaseShiftSearch', params.BooleanParam,
-                          default=False, label='Do phase shift estimation?',
-                          condition='doEstimateCtf')
-            linePhaseShift = form.addLine('Phase shift range (deg.)',
-                                          condition='doPhaseShiftSearch',
-                                          help="Search range of the phase shift (start, end).")
-            linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0,
-                                    label='min', condition='doPhaseShiftSearch')
-            linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0,
-                                    label='max', condition='doPhaseShiftSearch')
+        form.addParam('doPhaseShiftSearch', params.BooleanParam,
+                      default=False, label='Do phase shift estimation?',
+                      condition='doEstimateCtf')
+        linePhaseShift = form.addLine('Phase shift range (deg.)',
+                                      condition='doPhaseShiftSearch',
+                                      help="Search range of the phase shift (start, end).")
+        linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0,
+                                label='min', condition='doPhaseShiftSearch')
+        linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0,
+                                label='max', condition='doPhaseShiftSearch')
 
         form.addSection(label='Extra options')
         form.addParam('doDW', params.BooleanParam, default=False,
@@ -409,10 +408,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 '-Gpu': '%(GPU)s'
             }
 
-            if Plugin.getActiveVersion() != V1_3_4 and self.doDW:
+            if self.doDW:
                 args['-ImgDose'] = acq.getDosePerFrame()
 
-            if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf.get():
+            if self.doEstimateCtf.get():
                 # Manage the CTF estimation:
                 # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
                 # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
@@ -695,7 +694,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self._store(outputSetOfTiltSeries)
 
             # Output set of CTF tomo series
-            if Plugin.getActiveVersion() != V1_3_4 and self.doEstimateCtf:
+            if self.doEstimateCtf:
                 outputCtfs = self.getOutputSetOfCtfs()
 
                 newCTFTomoSeries = CTFTomoSeries()
