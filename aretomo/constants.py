@@ -29,10 +29,7 @@ ARETOMO_HOME = 'ARETOMO_HOME'
 ARETOMO_CUDA_LIB = 'ARETOMO_CUDA_LIB'
 
 # Supported versions
-V1_0_0 = '1.0.0'
-V1_1_2 = '1.1.2'
 V1_1_3 = '1.1.3'
-V1_3_4 = '1.3.4'  # TODO: delete old aretomo
 
 RECON_SART = 0
 RECON_WBP = 1
