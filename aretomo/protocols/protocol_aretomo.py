@@ -359,11 +359,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         outputTsFileName = self.getFilePath(tsFn, tmpPrefix, ".mrc")
         rotationAngle = ts.getAcquisition().getTiltAxisAngle()
         doSwap = 45 < abs(rotationAngle) < 135
-        ts.applyTransform(outputTsFileName, swapXY=doSwap, presentAcqOrders=presentAcqOrders)
+        ts.applyTransform(outputTsFileName,
+                          swapXY=doSwap,
+                          presentAcqOrders=presentAcqOrders)
 
         # Generate angle file
         angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
-        ts.generateTltFile(angleFilePath, presentAcqOrders=presentAcqOrders)
+        ts.generateTltFile(angleFilePath,
+                           presentAcqOrders=presentAcqOrders,
+                           includeDose=self.doDW.get())
 
         if not self.skipAlign and self.alignZfile.hasValue():
             alignZfile = self.alignZfile.get()
