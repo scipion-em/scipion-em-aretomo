@@ -50,7 +50,7 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile
 from ..convert.dataimport import AretomoCtfParser
-from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES, V1_3_4
+from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
 
 OUT_TS = "TiltSeries"
 OUT_TS_ALN = "InterpolatedTiltSeries"
