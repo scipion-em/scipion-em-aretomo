@@ -48,7 +48,7 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 
 from .. import Plugin
-from ..convert.convert import getTransformationMatrix, readAlnFile
+from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile
 from ..convert.dataimport import AretomoCtfParser
 from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
 
@@ -354,24 +354,28 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         pwutils.makePath(tmpPrefix)
         pwutils.makePath(extraPrefix)
 
-        # Apply the transformation for the input tilt-series
-        outputTsFileName = self.getFilePath(tsFn, tmpPrefix, ".mrc")
-        rotationAngle = ts.getAcquisition().getTiltAxisAngle()
-        doSwap = 45 < abs(rotationAngle) < 135
-        ts.applyTransform(outputTsFileName,
-                          swapXY=doSwap,
-                          presentAcqOrders=presentAcqOrders)
+        if self.skipAlign:
+            if self.makeTomo:
+                writeAlnFile(ts, self.getAlnFile(tsFn, tsId))
+        else:
+            # Apply the transformation for the input tilt-series
+            outputTsFileName = self.getFilePath(tsFn, tmpPrefix, ".mrc")
+            rotationAngle = ts.getAcquisition().getTiltAxisAngle()
+            doSwap = 45 < abs(rotationAngle) < 135
+            ts.applyTransform(outputTsFileName,
+                              swapXY=doSwap,
+                              presentAcqOrders=presentAcqOrders)
 
-        # Generate angle file
-        angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
-        ts.generateTltFile(angleFilePath,
-                           presentAcqOrders=presentAcqOrders,
-                           includeDose=self.doDW.get())
+            # Generate angle file
+            angleFilePath = self.getFilePath(tsFn, tmpPrefix, ".tlt")
+            ts.generateTltFile(angleFilePath,
+                               presentAcqOrders=presentAcqOrders,
+                               includeDose=self.doDW.get())
 
-        if not self.skipAlign and self.alignZfile.hasValue():
-            alignZfile = self.alignZfile.get()
-            if os.path.exists(alignZfile):
-                self.perTsAlignZ = self.readThicknessFile(alignZfile)
+            if self.alignZfile.hasValue():
+                alignZfile = self.alignZfile.get()
+                if os.path.exists(alignZfile):
+                    self.perTsAlignZ = self.readThicknessFile(alignZfile)
 
         if self.useInputProt:
             # Find and copy aln file
@@ -400,7 +404,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 '-InMrc': self.getFilePath(tsFn, tmpPrefix, ".mrc"),
                 '-OutMrc': self.getFilePath(tsFn, extraPrefix, ".mrc"),
                 '-OutImod': self.outImod.get(),
-                '-AngFile': self.getFilePath(tsFn, tmpPrefix, ".tlt"),
                 '-VolZ': self.tomoThickness if self.makeTomo else 0,
                 '-OutBin': self.binFactor,
                 '-FlipInt': 1 if self.flipInt else 0,
@@ -411,6 +414,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 '-AmpContrast': acq.getAmplitudeContrast(),
                 '-Gpu': '%(GPU)s'
             }
+
+            if self.skipAlign and self.makeTomo:
+                args['-InMrc'] = ts.getFirstItem().getFileName()
+                args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
+            else:
+                args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ".tlt")
 
             if self.doDW:
                 args['-ImgDose'] = acq.getDosePerFrame()
@@ -482,7 +491,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         ts = self.getTsFromTsId(tsId)
         extraPrefix = self._getExtraPath(tsId)
-        AretomoAln = readAlnFile(self.getFilePath(tsFn, extraPrefix, ".aln"))
+        AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
         indexDict = self._getIndexAssignDict(ts)
         finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
         for newInd, origInd in indexDict.items():
@@ -954,8 +963,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         tsSet = self._getSetOfTiltSeries()
         return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
 
-    def genTmpTsFile(self, tsId, tsFn):
-        return self.getFilePath(tsFn, self._getTmpPath(tsId), ".mrc")
+    def getAlnFile(self, tsFn, tsId):
+        return self.getFilePath(tsFn, self._getExtraPath(tsId), ".aln")
 
     @staticmethod
     def _getIndexAssignDict(ts: TiltSeries) -> dict:

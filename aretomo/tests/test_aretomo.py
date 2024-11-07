@@ -27,10 +27,13 @@ import copy
 
 import numpy as np
 
+from imod.constants import OUTPUT_TILTSERIES_NAME
+from imod.protocols import ProtImodImportTransformationMatrix
 from pwem import ALIGN_2D
 from pyworkflow.utils import magentaStr, blueStr
 from pyworkflow.tests import DataSet, setupTestProject
 from tomo.protocols import ProtImportTs
+from tomo.tests import RE4_STA_TUTO, DataSetRe4STATuto
 
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
 from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145
@@ -409,3 +412,115 @@ class TestAreTomo2(TestAreTomo2Base):
                             expectedSRate=self.unbinnedSRate * self.binFactor,
                             expectedDimensions=self.expectedTomoDims,
                             expectedOriginShifts=self.expectedOriginShifts)
+
+class TestAretomo2OnlyRec(TestBaseCentralizedLayer):
+    unbinnedSRate = DataSetRe4STATuto.unbinnedPixSize.value
+    binFactor = 4
+    unbinnedThk = 1200
+    expectedDims = [958, 926, 300]
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.ds = DataSet.getDataSet(RE4_STA_TUTO)
+        cls._runPreviousProtocols()
+
+    @classmethod
+    def _runPreviousProtocols(cls):
+        cls.importedTs = cls._runImportTs()
+
+    @classmethod
+    def _runImportTs(cls):
+        print(magentaStr("\n==> Importing the tilt series:"))
+        protImportTs = cls.newProtocol(ProtImportTs,
+                                       filesPath=cls.ds.getFile(DataSetRe4STATuto.tsPath.value),
+                                       filesPattern=DataSetRe4STATuto.tsPattern.value,
+                                       exclusionWords=DataSetRe4STATuto.exclusionWordsTs03ts54.value,
+                                       anglesFrom=2,  # From tlt file
+                                       voltage=DataSetRe4STATuto.voltage.value,
+                                       magnification=DataSetRe4STATuto.magnification.value,
+                                       sphericalAberration=DataSetRe4STATuto.sphericalAb.value,
+                                       amplitudeContrast=DataSetRe4STATuto.amplitudeContrast.value,
+                                       samplingRate=cls.unbinnedSRate,
+                                       doseInitial=DataSetRe4STATuto.initialDose.value,
+                                       dosePerFrame=DataSetRe4STATuto.dosePerTiltImg.value,
+                                       tiltAxisAngle=DataSetRe4STATuto.tiltAxisAngle.value)
+
+        cls.launchProtocol(protImportTs)
+        tsImported = getattr(protImportTs, protImportTs.OUTPUT_NAME, None)
+        return tsImported
+
+    @classmethod
+    def _runImportTrMatrix(cls):
+        print(magentaStr("\n==> Importing the TS' transformation matrices with IMOD:"))
+        protImportTrMatrix = cls.newProtocol(ProtImodImportTransformationMatrix,
+                                             filesPath=cls.ds.getFile(DataSetRe4STATuto.tsPath.value),
+                                             filesPattern=DataSetRe4STATuto.transformPattern.value,
+                                             inputSetOfTiltSeries=cls.importedTs)
+        cls.launchProtocol(protImportTrMatrix)
+        outTsSet = getattr(protImportTrMatrix, OUTPUT_TILTSERIES_NAME, None)
+        return outTsSet
+
+    @classmethod
+    def _excludeTsSetViews(cls, tsSet, excludedViewsDict):
+        tsList = [ts.clone(ignoreAttrs=[]) for ts in tsSet]
+        for ts in tsList:
+            cls._excludeTsViews(tsSet, ts, excludedViewsDict[ts.getTsId()])
+
+    @staticmethod
+    def _excludeTsViews(tsSet, ts, excludedViewsList):
+        tiList = [ti.clone() for ti in ts]
+        for i, ti in enumerate(tiList):
+            if i in excludedViewsList:
+                ti._objEnabled = False
+                ts.update(ti)
+        ts.write()
+        tsSet.update(ts)
+        tsSet.write()
+
+    def _runAreTomoRec(self, inTsSet, eV=False):
+        msg = "\n==> Testing AreTomo (only tomogram reconstruction):"
+        eVLabel = ''
+        if eV:
+            msg += "\n\t- Input set of TS contains excluded views"
+            eVLabel = ', eV'
+        print(magentaStr(msg))
+
+        # Run the protocol
+        prot = self.newProtocol(ProtAreTomoAlignRecon,
+                                inputSetOfTiltSeries=inTsSet,
+                                skipAlign=True,
+                                makeTomo=True,
+                                tomoThickness=1200,
+                                binFactor=self.binFactor)
+        prot.setObjLabel(f'Reconstruct only, {eVLabel}')
+        self.launchProtocol(prot)
+        return getattr(prot, OUT_TOMO, None)
+
+    def _checkResults(self, inTomoSet):
+        self.checkTomograms(inTomoSet,
+                            expectedSetSize=2,
+                            expectedSRate=self.unbinnedSRate * self.binFactor,
+                            expectedDimensions=self.expectedDims)
+
+    def test_rec(self):
+        tsWithAlignment = self._runImportTrMatrix()
+        # Run the protocol
+        tomoSet = self._runAreTomoRec(tsWithAlignment)
+        # Check the results
+        self._checkResults(tomoSet)
+
+    def test_rec_eV(self):
+        TS_03 = 'TS_03'
+        TS_54 = 'TS_54'
+        excludedViewsDict = {
+            TS_03: [0, 1, 2, 38, 39],
+            TS_54: [0, 1, 38, 39, 40]
+        }
+        # Exclude some views at metadata level
+        tsWithAlignment = self._runImportTrMatrix()
+        self._excludeTsSetViews(tsWithAlignment, excludedViewsDict)
+        # Run the protocol
+        tomoSet = self._runAreTomoRec(tsWithAlignment, eV=True)
+        # Check the results
+        self._checkResults(tomoSet)
