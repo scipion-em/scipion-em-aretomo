@@ -43,6 +43,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
+from pyworkflow.utils import Message
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -81,7 +82,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         # --------------------------- DEFINE param functions ----------------------
 
     def _defineParams(self, form):
-        form.addSection(label='Input')
+        form.addSection(label=Message.LABEL_INPUT)
         form.addParam('inputSetOfTiltSeries',
                       params.PointerParam,
                       pointerClass='SetOfTiltSeries',
@@ -91,41 +92,49 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'tilt-series are expected to be already aligned.')
 
         form.addParam('skipAlign', params.BooleanParam,
-                      default=False, label='Skip alignment?',
+                      default=False,
+                      label='Skip alignment?',
                       help='You can skip alignment if you just want to '
                            'reconstruct a tomogram from already '
                            'aligned tilt-series.')
 
         form.addParam('makeTomo', params.BooleanParam,
-                      default=True, label='Reconstruct the tomograms?',
+                      default=True,
+                      label='Reconstruct the tomograms?',
                       help='You can skip tomogram reconstruction, so that input '
                            'tilt-series will be only aligned.')
 
+        onlyRecTomograms = 'skipAlign and makeTomo'
+        doAlignTs = 'not skipAlign'
+
         form.addParam('saveStack', params.BooleanParam,
                       condition="not makeTomo and not skipAlign",
-                      default=True, label="Save interpolated aligned TS?",
+                      default=True,
+                      label="Save interpolated aligned TS?",
                       help="Choose No to discard aligned stacks.")
 
-        form.addParam('useInputProt', params.BooleanParam, default=False,
-                      condition="not skipAlign",
-                      expertLevel=params.LEVEL_ADVANCED,
-                      label="Use alignment from previous AreTomo run?")
-        form.addParam('inputProt', params.PointerParam, allowsNull=True,
-                      pointerClass="ProtAreTomoAlignRecon",
-                      condition="not skipAlign and useInputProt",
-                      expertLevel=params.LEVEL_ADVANCED,
-                      label="Previous AreTomo run",
-                      help="Use alignment from a previous AreTomo run. "
-                           "The match is made using *tsId*. This option is useful "
-                           "when working with odd/even tilt-series sets. "
-                           "All other input alignment parameters will be ignored.")
+        # form.addParam('useInputProt', params.BooleanParam, default=False,
+        #               condition="not skipAlign",
+        #               expertLevel=params.LEVEL_ADVANCED,
+        #               label="Use alignment from previous AreTomo run?")
+        # form.addParam('inputProt', params.PointerParam, allowsNull=True,
+        #               pointerClass="ProtAreTomoAlignRecon",
+        #               condition="not skipAlign and useInputProt",
+        #               expertLevel=params.LEVEL_ADVANCED,
+        #               label="Previous AreTomo run",
+        #               help="Use alignment from a previous AreTomo run. "
+        #                    "The match is made using *tsId*. This option is useful "
+        #                    "when working with odd/even tilt-series sets. "
+        #                    "All other input alignment parameters will be ignored.")
 
         form.addParam('binFactor', params.IntParam,
-                      default=2, label='Binning', important=True,
+                      default=2,
+                      label='Binning',
+                      important=True,
                       help='Binning for aligned output tilt-series / volume.')
 
         form.addParam('alignZ', params.IntParam, default=800,
-                      condition='not skipAlign and not useInputProt',
+                      condition=doAlignTs,
                       important=True,
                       label='Volume height for alignment (voxels)',
                       help='Specifies Z height (*unbinned*) of the temporary volume '
@@ -138,7 +147,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         form.addParam('alignZfile', params.FileParam,
                       expertLevel=params.LEVEL_ADVANCED,
-                      condition='not skipAlign and not useInputProt',
+                      condition=doAlignTs,
                       label='File with volume height for alignment per tilt-series',
                       help='Specifies a text file containing the Z height (*unbinned*) '
                            'to be used for alignment of individual tilt-series. '
@@ -148,16 +157,20 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            'per line.')
 
         form.addParam('tomoThickness', params.IntParam,
-                      condition='makeTomo', important=True,
-                      default=1200, label='Tomogram thickness unbinned (voxels)',
+                      condition='makeTomo',
+                      important=True,
+                      default=1200,
+                      label='Tomogram thickness unbinned (voxels)',
                       help='Z height of the reconstructed volume in '
                            '*unbinned* voxels.')
 
         form.addParam('refineTiltAngles',
-                      params.EnumParam, condition="not useInputProt",
+                      params.EnumParam,
+                      condition=doAlignTs,
                       choices=['No', 'Measure only', 'Measure and correct'],
                       display=params.EnumParam.DISPLAY_COMBO,
-                      label="Refine tilt angles?", default=1,
+                      label="Refine tilt angles?",
+                      default=1,
                       help="You have three options:\na) Disable measure and correction\n"
                            "b) Measure only (default). Correction is done during alignment but not "
                            "for final reconstruction\nc) Measure and correct\n\n"
@@ -169,12 +182,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "orientations of missing wedges.")
 
         form.addParam('refineTiltAxis', params.EnumParam,
-                      condition="not useInputProt",
+                      condition=doAlignTs,
                       choices=['No',
                                'Refine and use the refined value for the entire tilt series',
                                'Refine and calculate tilt axis at each tilt angle'],
                       display=params.EnumParam.DISPLAY_COMBO,
-                      label="Refine tilt axis angle?", default=1,
+                      label="Refine tilt axis angle?",
+                      default=1,
                       help="Tilt axis determination is a two-step processing in AreTomo. "
                            "A single tilt axis is first calculated followed by the determination "
                            "of how tilt axis varies over the entire tilt range. The initial "
@@ -183,6 +197,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         form.addParam('outImod', params.EnumParam,
                       display=params.EnumParam.DISPLAY_COMBO,
+                      condition=doAlignTs,
                       choices=['No', 'Relion 4', 'Warp', 'Save locally aligned TS'],
                       default=0,
                       label="Generate extra IMOD output?",
@@ -192,39 +207,51 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "High frequencies are enhanced to alleviate the attenuation "
                            "due to interpolation.")
 
-        form.addSection(label='CTF')
-        form.addParam('doEstimateCtf', params.BooleanParam,
-                      default=True, label='Estimate the CTF?',
-                      condition='not (skipAlign and makeTomo)')
+        group = form.addGroup('CTF', condition=doAlignTs)
+        group.addParam('doEstimateCtf', params.BooleanParam,
+                       default=True,
+                       label='Estimate the CTF?',
+                       condition=doAlignTs)
 
-        form.addParam('doPhaseShiftSearch', params.BooleanParam,
-                      default=False, label='Do phase shift estimation?',
-                      condition='doEstimateCtf')
-        linePhaseShift = form.addLine('Phase shift range (deg.)',
-                                      condition='doPhaseShiftSearch',
-                                      help="Search range of the phase shift (start, end).")
-        linePhaseShift.addParam('minPhaseShift', params.IntParam, default=0,
-                                label='min', condition='doPhaseShiftSearch')
-        linePhaseShift.addParam('maxPhaseShift', params.IntParam, default=0,
-                                label='max', condition='doPhaseShiftSearch')
+        group.addParam('doPhaseShiftSearch', params.BooleanParam,
+                       default=False,
+                       label='Do phase shift estimation?',
+                       condition='doEstimateCtf')
+        linePhaseShift = group.addLine('Phase shift range (deg.)',
+                                       condition='doPhaseShiftSearch',
+                                       help="Search range of the phase shift (start, end).")
+        linePhaseShift.addParam('minPhaseShift', params.IntParam,
+                                default=0,
+                                label='min',
+                                condition='doPhaseShiftSearch')
+        linePhaseShift.addParam('maxPhaseShift', params.IntParam,
+                                default=0,
+                                label='max',
+                                condition='doPhaseShiftSearch')
 
         form.addSection(label='Extra options')
-        form.addParam('doDW', params.BooleanParam, default=False,
+        form.addParam('doDW', params.BooleanParam,
+                      default=False,
                       label="Do dose-weighting?")
         form.addParam('reconMethod', params.EnumParam,
                       choices=['SART', 'WBP'],
+                      default=RECON_SART,
+                      condition='makeTomo',
                       display=params.EnumParam.DISPLAY_HLIST,
-                      label="Reconstruction method", default=RECON_SART,
+                      label="Reconstruction method",
                       help="Choose either SART or weighted back "
                            "projection (WBP).")
 
-        line = form.addLine("SART options", condition='reconMethod==0')
-        line.addParam('SARTiter', params.IntParam, default=15,
+        line = form.addLine("SART options", condition=f'reconMethod=={RECON_SART}')
+        line.addParam('SARTiter', params.IntParam,
+                      default=15,
                       label='iterations')
-        line.addParam('SARTproj', params.IntParam, default=5,
+        line.addParam('SARTproj', params.IntParam,
+                      default=5,
                       label='projections per subset')
 
-        form.addParam('flipInt', params.BooleanParam, default=False,
+        form.addParam('flipInt', params.BooleanParam,
+                      default=False,
                       label="Flip intensity?",
                       help="By default, the reconstructed volume "
                            "and the input tilt series use the same grayscale "
@@ -239,7 +266,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "will be similar to IMOD.")
 
         form.addParam('roiArea', params.StringParam, default='',
-                      condition="not useInputProt",
+                      condition=doAlignTs,
                       label="ROI for focused alignment",
                       help="By default AreTomo assumes the region of interest "
                            "at the center of 0º projection image. A circular "
@@ -259,45 +286,51 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         group = form.addGroup('Local motion correction')
         group.addParam('sampleType', params.EnumParam,
-                       condition="not useInputProt",
+                       # condition="not useInputProt",
                        choices=['Disable local correction', 'Isolated',
                                 'Well distributed'],
                        display=params.EnumParam.DISPLAY_COMBO,
-                       label="Sample type", default=0,
+                       label="Sample type",
+                       default=0,
                        help="AreTomo provides two means to correct the local "
                             "motion, one for isolated sample and the other "
                             "for well distributed across the field of view.")
 
-        group.addParam('coordsFn', params.FileParam, default='',
+        group.addParam('coordsFn', params.FileParam,
+                       default='',
                        label='Coordinate file',
-                       condition='not useInputProt and sampleType==%d' % LOCAL_MOTION_COORDS,
+                       condition='sampleType==%d' % LOCAL_MOTION_COORDS,
                        help="A list of x and y coordinates should be put "
                             "into a two-column text file, one column for x "
                             "and the other for y. Each pair defines a region "
                             "of interest (ROI). The origin of the coordinate "
                             "system is at the image's lower left corner.")
 
-        line = group.addLine("Patches",
-                             condition='not useInputProt and sampleType==%d' % LOCAL_MOTION_PATCHES)
-        line.addParam('patchX', params.IntParam, default=5,
+        line = group.addLine("Patches", condition='sampleType==%d' % LOCAL_MOTION_PATCHES)
+        line.addParam('patchX', params.IntParam,
+                      default=5,
                       label='X')
-        line.addParam('patchY', params.IntParam, default=5,
+        line.addParam('patchY', params.IntParam,
+                      default=5,
                       label='Y')
 
-        form.addParam('darkTol', params.FloatParam, default=0.7,
+        form.addParam('darkTol', params.FloatParam,
+                      default=0.7,
+                      condition=doAlignTs,
                       important=True,
                       label="Dark tolerance",
                       help="Set tolerance for removing dark images. The range is "
                            "in (0, 1). The default value is 0.7. "
                            "The higher value is more restrictive.")
 
-        form.addParam('extraParams', params.StringParam, default='',
-                      expertLevel=params.LEVEL_ADVANCED,
+        form.addParam('extraParams', params.StringParam,
+                      default='',
                       label='Additional parameters',
                       help="Extra command line parameters. See AreTomo help.")
 
         form.addHidden(params.GPU_LIST, params.StringParam,
-                       default='0', label="Choose GPU IDs",
+                       default='0',
+                       label="Choose GPU IDs",
                        help="")
 
         form.addParallelSection(threads=2, mpi=0)
@@ -377,99 +410,98 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if os.path.exists(alignZfile):
                     self.perTsAlignZ = self.readThicknessFile(alignZfile)
 
-        if self.useInputProt:
-            # Find and copy aln file
-            protExtra = self.inputProt.get()._getExtraPath(tsId)
-            protAlnBase = self.getFilePath(tsFn, protExtra, ".aln").replace(
-                "_even", "*").replace("_odd", "*")
-            protAln = glob(protAlnBase)
-            if protAln:
-                pwutils.copyFile(protAln[0],
-                                 self.getFilePath(tsFn, extraPrefix, ".aln"))
-                self.info(f"Using input alignment: {protAln[0]}")
-            else:
-                raise FileNotFoundError("Missing input aln file ", protAlnBase)
+        # if self.useInputProt:
+        #     # Find and copy aln file
+        #     protExtra = self.inputProt.get()._getExtraPath(tsId)
+        #     protAlnBase = self.getFilePath(tsFn, protExtra, ".aln").replace(
+        #         "_even", "*").replace("_odd", "*")
+        #     protAln = glob(protAlnBase)
+        #     if protAln:
+        #         pwutils.copyFile(protAln[0],
+        #                          self.getFilePath(tsFn, extraPrefix, ".aln"))
+        #         self.info(f"Using input alignment: {protAln[0]}")
+        #     else:
+        #         raise FileNotFoundError("Missing input aln file ", protAlnBase)
 
     def runAreTomoStep(self, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
         self.info(f'------- runAreTomoStep ts_id: {tsId}')
+        ts = self.getTsFromTsId(tsId)
+        acq = ts.getAcquisition()
+
+        extraPrefix = self._getExtraPath(tsId)
+        tmpPrefix = self._getTmpPath(tsId)
+
+        args = {
+            '-InMrc': self.getFilePath(tsFn, tmpPrefix, ".mrc"),
+            '-OutMrc': self.getFilePath(tsFn, extraPrefix, ".mrc"),
+            '-OutImod': self.outImod.get(),
+            '-VolZ': self.tomoThickness if self.makeTomo else 0,
+            '-OutBin': self.binFactor,
+            '-FlipInt': 1 if self.flipInt else 0,
+            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
+            '-PixSize': ts.getSamplingRate(),
+            '-Kv': acq.getVoltage(),
+            '-DarkTol': self.darkTol.get(),
+            '-AmpContrast': acq.getAmplitudeContrast(),
+            '-Gpu': '%(GPU)s'
+        }
+
+        if self.skipAlign and self.makeTomo:
+            args['-InMrc'] = ts.getFirstItem().getFileName()
+            args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
+        else:
+            args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ".tlt")
+
+        if self.doDW:
+            args['-ImgDose'] = acq.getDosePerFrame()
+
+        if self.doEstimateCtf.get():
+            # Manage the CTF estimation:
+            # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
+            # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
+            # doEstimateCtf flag parameter.
+            args['-Cs'] = acq.getSphericalAberration()
+            if self.doPhaseShiftSearch.get():
+                args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
+
+        # if not self.useInputProt:
+        #     args['-Align'] = 0 if self.skipAlign else 1
+
+        tiltAxisAngle = acq.getTiltAxisAngle() or 0.0
+        if ts.hasAlignment():
+            # in this case we already used ts.applyTransform()
+            tiltAxisAngle = 0.0
+
+        args['-TiltAxis'] = f"{tiltAxisAngle} {self.refineTiltAxis.get() - 1}"
+        args['-TiltCor'] = self.refineTiltAngles.get() - 1
+
+        if self.alignZfile.get():
+            # Check if we have AlignZ information per tilt-series
+            args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
+        else:
+            args['-AlignZ'] = self.alignZ
+
+        if self.sampleType.get() == LOCAL_MOTION_COORDS:
+            args['-RoiFile'] = self.coordsFn
+        elif self.sampleType.get() == LOCAL_MOTION_PATCHES:
+            args['-Patch'] = f"{self.patchX} {self.patchY}"
+
+        if self.roiArea.get():
+            args['-Roi'] = self.roiArea.get()
+
+        # else:
+        #     args['-AlnFile'] = self.getFilePath(tsFn, extraPrefix, ".aln")
+
+        if self.reconMethod == RECON_SART:
+            args['-Sart'] = f"{self.SARTiter} {self.SARTproj}"
+        else:
+            args['-Wbp'] = 1
+
+        param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
+        param += ' ' + self.extraParams.get()
+        program = Plugin.getProgram()
         try:
-            ts = self.getTsFromTsId(tsId)
-            acq = ts.getAcquisition()
-
-            extraPrefix = self._getExtraPath(tsId)
-            tmpPrefix = self._getTmpPath(tsId)
-
-            args = {
-                '-InMrc': self.getFilePath(tsFn, tmpPrefix, ".mrc"),
-                '-OutMrc': self.getFilePath(tsFn, extraPrefix, ".mrc"),
-                '-OutImod': self.outImod.get(),
-                '-VolZ': self.tomoThickness if self.makeTomo else 0,
-                '-OutBin': self.binFactor,
-                '-FlipInt': 1 if self.flipInt else 0,
-                '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
-                '-PixSize': ts.getSamplingRate(),
-                '-Kv': acq.getVoltage(),
-                '-DarkTol': self.darkTol.get(),
-                '-AmpContrast': acq.getAmplitudeContrast(),
-                '-Gpu': '%(GPU)s'
-            }
-
-            if self.skipAlign and self.makeTomo:
-                args['-InMrc'] = ts.getFirstItem().getFileName()
-                args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
-            else:
-                args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ".tlt")
-
-            if self.doDW:
-                args['-ImgDose'] = acq.getDosePerFrame()
-
-            if self.doEstimateCtf.get():
-                # Manage the CTF estimation:
-                # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
-                # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
-                # doEstimateCtf flag parameter.
-                args['-Cs'] = acq.getSphericalAberration()
-                if self.doPhaseShiftSearch.get():
-                    args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
-
-            if not self.useInputProt:
-                args['-Align'] = 0 if self.skipAlign else 1
-
-                tiltAxisAngle = acq.getTiltAxisAngle() or 0.0
-                if ts.hasAlignment():
-                    # in this case we already used ts.applyTransform()
-                    tiltAxisAngle = 0.0
-
-                args['-TiltAxis'] = f"{tiltAxisAngle} {self.refineTiltAxis.get() - 1}"
-                args['-TiltCor'] = self.refineTiltAngles.get() - 1
-
-                if self.alignZfile.get():
-                    # Check if we have AlignZ information per tilt-series
-                    args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
-                else:
-                    args['-AlignZ'] = self.alignZ
-
-                if self.sampleType.get() == LOCAL_MOTION_COORDS:
-                    args['-RoiFile'] = self.coordsFn
-                elif self.sampleType.get() == LOCAL_MOTION_PATCHES:
-                    args['-Patch'] = f"{self.patchX} {self.patchY}"
-
-                if self.roiArea.get():
-                    args['-Roi'] = self.roiArea.get()
-
-            else:
-                args['-AlnFile'] = self.getFilePath(tsFn, extraPrefix, ".aln")
-
-            if self.reconMethod == RECON_SART:
-                args['-Sart'] = f"{self.SARTiter} {self.SARTproj}"
-            else:
-                args['-Wbp'] = 1
-
-            param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
-            param += ' ' + self.extraParams.get()
-            program = Plugin.getProgram()
-
             self.runJob(program, param, env=Plugin.getEnviron())
         except Exception as e:
             self._failedTsList.append(tsId)
@@ -804,14 +836,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         errors = []
         self._validateThreads(errors)
 
-        if self.useInputProt:
-            if not self.inputProt.hasValue():
-                errors.append("Provide input AreTomo protocol for alignment.")
-        else:
-            if (not self.skipAlign) and self.makeTomo and (
-                    self.alignZ >= self.tomoThickness):
-                errors.append("Z volume height for alignment should be always "
-                              "smaller than tomogram thickness.")
+        # if self.useInputProt:
+        #     if not self.inputProt.hasValue():
+        #         errors.append("Provide input AreTomo protocol for alignment.")
+        # else:
+        if (not self.skipAlign) and self.makeTomo and (
+                self.alignZ >= self.tomoThickness):
+            errors.append("Z volume height for alignment should be always "
+                          "smaller than tomogram thickness.")
 
         if self.skipAlign and not self.makeTomo:
             errors.append("You cannot switch off both alignment and "
