@@ -29,11 +29,9 @@
 # **************************************************************************
 
 import os
-from glob import glob
 import numpy as np
 import time
 from typing import List, Literal, Tuple, Union, Optional
-
 from pwem import ALIGN_NONE, ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
@@ -104,28 +102,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                       help='You can skip tomogram reconstruction, so that input '
                            'tilt-series will be only aligned.')
 
-        onlyRecTomograms = 'skipAlign and makeTomo'
-        doAlignTs = 'not skipAlign'
+        form.addParam('doEvenOdd', params.BooleanParam,
+                      label='Reconstruct the odd/even tomograms?',
+                      default=False,
+                      condition='makeTomo')
 
+        doAlignTs = 'not skipAlign'
         form.addParam('saveStack', params.BooleanParam,
                       condition="not makeTomo and not skipAlign",
                       default=True,
                       label="Save interpolated aligned TS?",
                       help="Choose No to discard aligned stacks.")
-
-        # form.addParam('useInputProt', params.BooleanParam, default=False,
-        #               condition="not skipAlign",
-        #               expertLevel=params.LEVEL_ADVANCED,
-        #               label="Use alignment from previous AreTomo run?")
-        # form.addParam('inputProt', params.PointerParam, allowsNull=True,
-        #               pointerClass="ProtAreTomoAlignRecon",
-        #               condition="not skipAlign and useInputProt",
-        #               expertLevel=params.LEVEL_ADVANCED,
-        #               label="Previous AreTomo run",
-        #               help="Use alignment from a previous AreTomo run. "
-        #                    "The match is made using *tsId*. This option is useful "
-        #                    "when working with odd/even tilt-series sets. "
-        #                    "All other input alignment parameters will be ignored.")
 
         form.addParam('binFactor', params.IntParam,
                       default=2,
@@ -410,99 +397,17 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if os.path.exists(alignZfile):
                     self.perTsAlignZ = self.readThicknessFile(alignZfile)
 
-        # if self.useInputProt:
-        #     # Find and copy aln file
-        #     protExtra = self.inputProt.get()._getExtraPath(tsId)
-        #     protAlnBase = self.getFilePath(tsFn, protExtra, ".aln").replace(
-        #         "_even", "*").replace("_odd", "*")
-        #     protAln = glob(protAlnBase)
-        #     if protAln:
-        #         pwutils.copyFile(protAln[0],
-        #                          self.getFilePath(tsFn, extraPrefix, ".aln"))
-        #         self.info(f"Using input alignment: {protAln[0]}")
-        #     else:
-        #         raise FileNotFoundError("Missing input aln file ", protAlnBase)
-
     def runAreTomoStep(self, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
         self.info(f'------- runAreTomoStep ts_id: {tsId}')
-        ts = self.getTsFromTsId(tsId)
-        acq = ts.getAcquisition()
-
-        extraPrefix = self._getExtraPath(tsId)
-        tmpPrefix = self._getTmpPath(tsId)
-
-        args = {
-            '-InMrc': self.getFilePath(tsFn, tmpPrefix, ".mrc"),
-            '-OutMrc': self.getFilePath(tsFn, extraPrefix, ".mrc"),
-            '-OutImod': self.outImod.get(),
-            '-VolZ': self.tomoThickness if self.makeTomo else 0,
-            '-OutBin': self.binFactor,
-            '-FlipInt': 1 if self.flipInt else 0,
-            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
-            '-PixSize': ts.getSamplingRate(),
-            '-Kv': acq.getVoltage(),
-            '-DarkTol': self.darkTol.get(),
-            '-AmpContrast': acq.getAmplitudeContrast(),
-            '-Gpu': '%(GPU)s'
-        }
-
-        if self.skipAlign and self.makeTomo:
-            args['-InMrc'] = ts.getFirstItem().getFileName()
-            args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
-        else:
-            args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ".tlt")
-
-        if self.doDW:
-            args['-ImgDose'] = acq.getDosePerFrame()
-
-        if self.doEstimateCtf.get():
-            # Manage the CTF estimation:
-            # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
-            # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
-            # doEstimateCtf flag parameter.
-            args['-Cs'] = acq.getSphericalAberration()
-            if self.doPhaseShiftSearch.get():
-                args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
-
-        # if not self.useInputProt:
-        #     args['-Align'] = 0 if self.skipAlign else 1
-
-        tiltAxisAngle = acq.getTiltAxisAngle() or 0.0
-        if ts.hasAlignment():
-            # in this case we already used ts.applyTransform()
-            tiltAxisAngle = 0.0
-
-        args['-TiltAxis'] = f"{tiltAxisAngle} {self.refineTiltAxis.get() - 1}"
-        args['-TiltCor'] = self.refineTiltAngles.get() - 1
-
-        if self.alignZfile.get():
-            # Check if we have AlignZ information per tilt-series
-            args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
-        else:
-            args['-AlignZ'] = self.alignZ
-
-        if self.sampleType.get() == LOCAL_MOTION_COORDS:
-            args['-RoiFile'] = self.coordsFn
-        elif self.sampleType.get() == LOCAL_MOTION_PATCHES:
-            args['-Patch'] = f"{self.patchX} {self.patchY}"
-
-        if self.roiArea.get():
-            args['-Roi'] = self.roiArea.get()
-
-        # else:
-        #     args['-AlnFile'] = self.getFilePath(tsFn, extraPrefix, ".aln")
-
-        if self.reconMethod == RECON_SART:
-            args['-Sart'] = f"{self.SARTiter} {self.SARTproj}"
-        else:
-            args['-Wbp'] = 1
-
-        param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
-        param += ' ' + self.extraParams.get()
-        program = Plugin.getProgram()
         try:
+            ts = self.getTsFromTsId(tsId)
+            program = Plugin.getProgram()
+            param = self._genAretomoCmd(ts, tsFn, tsId)
             self.runJob(program, param, env=Plugin.getEnviron())
+            if self._getSetOfTiltSeries().hasOddEven():
+                oddFn, evenFn = ts.getOddEven()
+
         except Exception as e:
             self._failedTsList.append(tsId)
             self.error('Aretomo execution failed for tsId %s -> %s' % (tsId, e))
@@ -827,32 +732,28 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         return summary
 
-    def _methods(self) -> List[str]:
-        methods = []
-
-        return methods
-
     def _validate(self) -> List[str]:
         errors = []
+        inTsSet = self._getSetOfTiltSeries()
+        tsWithAlignment = inTsSet.hasAlignment()
         self._validateThreads(errors)
-
-        # if self.useInputProt:
-        #     if not self.inputProt.hasValue():
-        #         errors.append("Provide input AreTomo protocol for alignment.")
-        # else:
-        if (not self.skipAlign) and self.makeTomo and (
-                self.alignZ >= self.tomoThickness):
+        if not self.skipAlign and self.makeTomo and self.alignZ >= self.tomoThickness:
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
-        if self.skipAlign and not self.makeTomo:
-            errors.append("You cannot switch off both alignment and "
-                          "reconstruction.")
+        if self.skipAlign and self.makeTomo and not tsWithAlignment:
+            errors.append('The tilt-series introduced do not have alignment information.')
 
-        if self._getSetOfTiltSeries():
-            if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
-                errors.append("Input tilt-series already have alignment "
-                              "information. You probably want to skip alignment step.")
+        if self.doEvenOdd.get() and not inTsSet.hasOddEven():
+            errors.append('The even/odd tomograms cannot be reconstructed as no even/odd tilt-series are found '
+                          'in the metadata of the introduced tilt-series.')
+
+        if self.skipAlign and not self.makeTomo:
+            errors.append("You cannot switch off both alignment and reconstruction.")
+
+        if tsWithAlignment and not self.skipAlign:
+            errors.append("Input tilt-series already have alignment "
+                          "information. You probably want to skip the alignment step.")
 
         if self.outImod.get() != 0 and not self.doDW:
             errors.append("Dose weighting needs to be enabled when "
@@ -861,6 +762,76 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         return errors
 
     # --------------------------- UTILS functions -----------------------------
+    def _genAretomoCmd(self, ts, tsFn, tsId, isEvenOdd=False):
+        acq = ts.getAcquisition()
+
+        extraPrefix = self._getExtraPath(tsId)
+        tmpPrefix = self._getTmpPath(tsId)
+
+        args = {
+            '-InMrc': self.getFilePath(tsFn, tmpPrefix, ".mrc"),
+            '-OutMrc': self.getFilePath(tsFn, extraPrefix, ".mrc"),
+            '-OutImod': self.outImod.get(),
+            '-Align': 0 if self.skipAlign or isEvenOdd else 1,
+            '-VolZ': self.tomoThickness if self.makeTomo else 0,
+            '-OutBin': self.binFactor,
+            '-FlipInt': 1 if self.flipInt else 0,
+            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
+            '-PixSize': ts.getSamplingRate(),
+            '-Kv': acq.getVoltage(),
+            '-DarkTol': self.darkTol.get(),
+            '-AmpContrast': acq.getAmplitudeContrast(),
+            '-Gpu': '%(GPU)s'
+        }
+        if self.doDW:
+            args['-ImgDose'] = acq.getDosePerFrame()
+
+        if not self.skipAlign:
+            args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ".tlt")
+            if self.alignZfile.get():
+                # Check if we have AlignZ information per tilt-series
+                args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
+            else:
+                args['-AlignZ'] = self.alignZ
+
+        if self.makeTomo:
+            if self.skipAlign:
+                args['-InMrc'] = tsFn
+                args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
+            if self.reconMethod == RECON_SART:
+                args['-Sart'] = f"{self.SARTiter} {self.SARTproj}"
+            else:
+                args['-Wbp'] = 1
+
+        if self.doEstimateCtf.get() and not isEvenOdd:
+            # Manage the CTF estimation:
+            # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
+            # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
+            # doEstimateCtf flag parameter.
+            args['-Cs'] = acq.getSphericalAberration()
+            if self.doPhaseShiftSearch.get():
+                args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
+
+        tiltAxisAngle = acq.getTiltAxisAngle() or 0.0
+        if ts.hasAlignment():
+            # in this case we already used ts.applyTransform()
+            tiltAxisAngle = 0.0
+
+        args['-TiltAxis'] = f"{tiltAxisAngle} {self.refineTiltAxis.get() - 1}"
+        args['-TiltCor'] = self.refineTiltAngles.get() - 1
+
+        if self.sampleType.get() == LOCAL_MOTION_COORDS:
+            args['-RoiFile'] = self.coordsFn
+        elif self.sampleType.get() == LOCAL_MOTION_PATCHES:
+            args['-Patch'] = f"{self.patchX} {self.patchY}"
+
+        if self.roiArea.get():
+            args['-Roi'] = self.roiArea.get()
+
+        param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
+        param += ' ' + self.extraParams.get()
+        return param
+
     def readingOutput(self) -> None:
         try:
             if hasattr(self, OUT_TS):
@@ -899,7 +870,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if ext is not None:
             fileExtension = ext
 
-        return os.path.join(prefix, fileName + fileExtension)
+        return os.path.join(prefix, fileName.replace('_even', '').replace('_odd', '') + fileExtension)
 
     def getOutputSetOfTomograms(self) -> SetOfTomograms:
         outputSetOfTomograms = getattr(self, OUT_TOMO, None)
