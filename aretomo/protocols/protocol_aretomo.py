@@ -185,6 +185,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         form.addParam('outImod', params.EnumParam,
                       display=params.EnumParam.DISPLAY_COMBO,
                       condition=doAlignTs,
+                      expertLevel=params.LEVEL_ADVANCED,
                       choices=['No', 'Relion 4', 'Warp', 'Save locally aligned TS'],
                       default=0,
                       label="Generate extra IMOD output?",
@@ -254,6 +255,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         form.addParam('roiArea', params.StringParam, default='',
                       condition=doAlignTs,
+                      expertLevel=params.LEVEL_ADVANCED,
                       label="ROI for focused alignment",
                       help="By default AreTomo assumes the region of interest "
                            "at the center of 0º projection image. A circular "

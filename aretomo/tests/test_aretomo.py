@@ -493,7 +493,7 @@ class TestAretomo2OnlyRec(TestBaseCentralizedLayer):
                                 makeTomo=True,
                                 tomoThickness=1200,
                                 binFactor=self.binFactor)
-        prot.setObjLabel(f'Reconstruct only, {eVLabel}')
+        prot.setObjLabel(f'Reconstruct only {eVLabel}')
         self.launchProtocol(prot)
         return getattr(prot, OUT_TOMO, None)
 
