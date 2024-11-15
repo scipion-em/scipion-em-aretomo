@@ -407,8 +407,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             program = Plugin.getProgram()
             param = self._genAretomoCmd(ts, tsFn, tsId)
             self.runJob(program, param, env=Plugin.getEnviron())
-            if self._getSetOfTiltSeries().hasOddEven():
+            if self.doEvenOdd.get():
                 oddFn, evenFn = ts.getOddEven()
+                # Odd
+                self.info(f'------- runAreTomoStep ts_id: {tsId} ODD')
+                param = self._genAretomoCmd(ts, oddFn, tsId, isEvenOdd=True)
+                self.runJob(program, param, env=Plugin.getEnviron())
+                # Even
+                self.info(f'------- runAreTomoStep ts_id: {tsId} EVEN')
+                param = self._genAretomoCmd(ts, evenFn, tsId, isEvenOdd=True)
+                self.runJob(program, param, env=Plugin.getEnviron())
 
         except Exception as e:
             self._failedTsList.append(tsId)
@@ -511,7 +519,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             newTomogram.setAcquisition(ts.getAcquisition())
             newTomogram.setTsId(tsId)
             newTomogram.setCtfCorrected(ts.ctfCorrected())
-
+            if self.doEvenOdd.get():
+                oddFn, evenFn = ts.getOddEven()
+                self.getFilePath(oddFn, extraPrefix, ".mrc")
+                newTomogram.setHalfMaps([self.getFilePath(oddFn, extraPrefix, ".mrc"),
+                                         self.getFilePath(evenFn, extraPrefix, ".mrc")])
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
             outputSetOfTomograms.write()
