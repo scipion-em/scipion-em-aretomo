@@ -56,7 +56,7 @@ b) Developer's version
 
 To check the installation, simply run the following Scipion test:
 
-``scipion test aretomo.tests.test_protocols_aretomo.TestAreTomo``
+``scipion test aretomo.tests.test_protocols_aretomo``
 
 Licensing
 ---------
