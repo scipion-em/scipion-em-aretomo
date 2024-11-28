@@ -62,6 +62,11 @@ class TestAreTomo2Base(TestBaseCentralizedLayer):
         TS_079: [0, 1, 38, 40],
         TS_145: [0, 1, 2, 39, 40]
     }
+    # Because of AreTomo's slightly different angular refinement results depending on the Cuda toolkit version, etc,
+    # these tests' angular tolerance for both the tilt angles and the tilt axis / rotation angle are 1 degree instead
+    # of the default 0.1 deg.
+    tiltAnglesTolDeg = 1
+    rotAngleTolDeg = 1
 
     @classmethod
     def setUpClass(cls):
@@ -190,7 +195,9 @@ class TestAreTomo2(TestAreTomo2Base):
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles,
-                             excludedViewsDict=excludedViews)
+                             excludedViewsDict=excludedViews,
+                             tiltAnglesTolDeg=self.tiltAnglesTolDeg,
+                             rotAngleTolDeg=self.rotAngleTolDeg)
         # Interpolated TS
         self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
                              expectedSetSize=self.nTiltSeries,
@@ -329,7 +336,9 @@ class TestAreTomo2(TestAreTomo2Base):
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles,
-                             excludedViewsDict=excludedViews)
+                             excludedViewsDict=excludedViews,
+                             tiltAnglesTolDeg=self.tiltAnglesTolDeg,
+                             rotAngleTolDeg=self.rotAngleTolDeg)
 
         # Interpolated TS
         self.checkTiltSeries(getattr(prot, OUT_TS_ALN, None),
@@ -401,7 +410,9 @@ class TestAreTomo2(TestAreTomo2Base):
                              hasAlignment=True,
                              alignment=ALIGN_2D,
                              anglesCount=self.nAngles,
-                             excludedViewsDict=excludedViews)
+                             excludedViewsDict=excludedViews,
+                             tiltAnglesTolDeg=self.tiltAnglesTolDeg,
+                             rotAngleTolDeg=self.rotAngleTolDeg)
 
         # CTFs
         self._checkCTFs(getattr(prot, OUT_CTFS, None), excludedViewsDict=excludedViews)
