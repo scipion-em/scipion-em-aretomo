@@ -9,6 +9,7 @@
   - Tests renewed with a better adapted (real dark frames) test dataset and with cases of TS with excluded views.
   - Add needsgpu attribute to the steps generation.
   - Aln file writer method added to adapt the plugin to the API of AreTomo2-1.1.3 when only reconstructing the tomograms.
+  - Fix indirect pointers.
 3.9.5: add aretomo2 1.1.3
 3.9.4: set aretomo2 1.0.0 as default, because 1.1.2 has broken remove dark option
 3.9.3: hotfix: _defineVariables method must be a class method to be compatible with scipion command config -p

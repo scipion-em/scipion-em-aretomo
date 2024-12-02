@@ -35,7 +35,7 @@ from typing import List, Literal, Tuple, Union, Optional
 from pwem import ALIGN_NONE, ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
-from pyworkflow.object import Set, String
+from pyworkflow.object import Set, String, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
@@ -896,7 +896,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTomograms.setSamplingRate(self._getOutputSampling())
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{OUT_TOMO: outputSetOfTomograms})
-            self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTomograms)
+            self._defineSourceRelation(self._getSetOfTiltSeries(isPointer=True), outputSetOfTomograms)
         return getattr(self, OUT_TOMO)
 
     def getOutputSetOfTiltSeries(self,
@@ -927,7 +927,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             outputSetOfTiltSeries.setAlignment(alignment)
             outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{outputName: outputSetOfTiltSeries})
-            self._defineSourceRelation(self.inputSetOfTiltSeries,
+            self._defineSourceRelation(self._getSetOfTiltSeries(isPointer=True),
                                        outputSetOfTiltSeries)
         return outputSetOfTiltSeries
 
@@ -936,15 +936,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if outputCtfs:
             outputCtfs.enableAppend()
         else:
+            inTsPointer = self._getSetOfTiltSeries(isPointer=True)
             outputCtfs = SetOfCTFTomoSeries.create(self._getPath(), template='CTFmodels%s.sqlite')
-            outputCtfs.setSetOfTiltSeries(self.getOutputSetOfTiltSeries(OUT_TS))
+            outputCtfs.setSetOfTiltSeries(inTsPointer)
             outputCtfs.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{OUT_CTFS: outputCtfs})
-            self._defineSourceRelation(self.inputSetOfTiltSeries, outputCtfs)
+            self._defineSourceRelation(inTsPointer, outputCtfs)
         return outputCtfs
 
-    def _getSetOfTiltSeries(self) -> SetOfTiltSeries:
-        return self.inputSetOfTiltSeries.get()
+    def _getSetOfTiltSeries(self, isPointer: bool=False) -> Union[Pointer, SetOfTiltSeries]:
+        if isPointer:
+            return self.inputSetOfTiltSeries
+        else:
+            return self.inputSetOfTiltSeries.get()
 
     def _getOutputSampling(self) -> float:
         return self._getInputSampling() * self.binFactor.get()
@@ -972,7 +976,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             failedTsSet.setStreamState(Set.STREAM_OPEN)
 
             self._defineOutputs(**{FAILED_TS: failedTsSet})
-            self._defineSourceRelation(inputSet, failedTsSet)
+            self._defineSourceRelation(self._getSetOfTiltSeries(isPointer=True), failedTsSet)
 
         return failedTsSet
 
