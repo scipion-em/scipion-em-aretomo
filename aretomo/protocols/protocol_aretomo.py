@@ -345,8 +345,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             for ts in self._getSetOfTiltSeries():
                 if ts.getTsId() not in self.TS_read:
                     tsId = ts.getTsId()
-                    self.info(f"Steps created for TS_ID: {tsId}")
-                    self.TS_read.append(tsId)
                     try:
                         args = (tsId, ts.getFirstItem().getFileName())
                         convertInput = self._insertFunctionStep(self.convertInputStep, *args,
@@ -359,11 +357,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                                                  prerequisites=[runAreTomo],
                                                                  needsGPU=False)
                         closeSetStepDeps.append(createOutputS)
-
+                        self.info(f"Steps created for TS_ID: {tsId}")
+                        self.TS_read.append(tsId)
                     except Exception as e:
                         self.error(f'Error reading TS info: {e}')
                         self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
+
             time.sleep(10)
+            if self._getSetOfTiltSeries().isStreamOpen():
+                self._getSetOfTiltSeries().loadAllProperties() # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsId: str, tsFn: str):
