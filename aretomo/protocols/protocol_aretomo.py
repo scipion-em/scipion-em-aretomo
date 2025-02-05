@@ -751,13 +751,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     def _validate(self) -> List[str]:
         errors = []
         inTsSet = self._getSetOfTiltSeries()
-        tsWithAlignment = inTsSet.hasAlignment()
         self._validateThreads(errors)
         if not self.skipAlign and self.makeTomo and self.alignZ >= self.tomoThickness:
             errors.append("Z volume height for alignment should be always "
                           "smaller than tomogram thickness.")
 
-        if self.skipAlign and self.makeTomo and not tsWithAlignment:
+        if self.skipAlign and self.makeTomo and not inTsSet.hasAlignment():
             errors.append('The tilt-series introduced do not have alignment information.')
 
         if self.doEvenOdd.get() and not inTsSet.hasOddEven():
@@ -767,15 +766,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if self.skipAlign and not self.makeTomo:
             errors.append("You cannot switch off both alignment and reconstruction.")
 
-        if tsWithAlignment and not self.skipAlign:
-            errors.append("Input tilt-series already have alignment "
-                          "information. You probably want to skip the alignment step.")
-
         if self.outImod.get() != 0 and not self.doDW:
             errors.append("Dose weighting needs to be enabled when "
                           "saving extra IMOD output.")
 
         return errors
+
+    def _warnings(self) -> List[str]:
+        warnMsgs = []
+        if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
+            warnMsgs.append("Input tilt-series already have alignment "
+                          "information. You probably want to skip the alignment step.")
+        return warnMsgs
+
 
     # --------------------------- UTILS functions -----------------------------
     def _genAretomoCmd(self, ts, tsFn, tsId, isEvenOdd=False):
