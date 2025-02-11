@@ -1,3 +1,6 @@
+3.10.1:
+ Users:
+  - Fix: re-align aligned tilt-series after having excluded views is now possible (validation is now a warning).
 3.10.0:
  Users:
   - Add input tilt-series excluded views management.
