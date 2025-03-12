@@ -346,7 +346,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if ts.getTsId() not in self.TS_read:
                     tsId = ts.getTsId()
                     try:
-                        args = (tsId, ts.getFirstItem().getFileName())
+                        with self._lock:
+                            fName = ts.getFirstItem().getFileName()
+                        args = (tsId, fName)
                         convertInput = self._insertFunctionStep(self.convertInputStep, *args,
                                                                 prerequisites=[],
                                                                 needsGPU=False)
@@ -360,7 +362,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self.info(f"Steps created for TS_ID: {tsId}")
                         self.TS_read.append(tsId)
                     except Exception as e:
-                        self.error(f'Error reading TS info: {e}')
+                        self.error(f'tsId = {tsId} -> Error reading TS info: {e}')
                         self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
 
             time.sleep(10)
@@ -380,7 +382,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         if self.skipAlign:
             if self.makeTomo:
-                writeAlnFile(ts, self.getAlnFile(tsFn, tsId))
+                writeAlnFile(ts, tsFn, self.getAlnFile(tsFn, tsId))
         else:
             # Apply the transformation for the input tilt-series
             outputTsFileName = self.getFilePath(tsFn, tmpPrefix, ".mrc")
