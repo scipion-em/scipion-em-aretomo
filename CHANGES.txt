@@ -7,6 +7,8 @@
   - Add some preventing locks in the steps generator step to prevent the recursive use of cursors that makes
     streamified protocols to close the output before expected.
   - Replace the setup.py by the corresponding pyproject.toml.
+  - Improve the method readingOutput.
+  - Improve robustness in streaming: check the tilt-series size before inserting the steps.
 3.10.1:
  Users:
   - Fix: re-align aligned tilt-series after having excluded views is now possible (validation is now a warning).

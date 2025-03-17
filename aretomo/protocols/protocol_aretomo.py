@@ -347,7 +347,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                          needsGPU=False)
                 break
             for ts in inTsSet.iterItems():
-                if ts.getTsId() not in self.TS_read:
+                if ts.getTsId() not in self.TS_read and ts.getSize() > 0:  # Avoid processing empty TS (before the Tis are added)
                     tsId = ts.getTsId()
                     try:
                         with self._lock:
@@ -877,14 +877,30 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         return param
 
     def readingOutput(self) -> None:
-        try:
-            if hasattr(self, OUT_TS):
-                for ts in getattr(self, OUT_TS):
-                    self.TS_read.append(ts.getTsId())
-            self.info(cyanStr(f'Tomograms calculated for this TS_ID : {self.TS_read}'))
+        if self.skipAlign.get():
+            self.__readingOutPutTomos()
+        else:
+            self.__readingOutPutTsSet()
 
-        except AttributeError:  # There is no outputSetOfTiltSeries
-            pass
+
+    def __readingOutPutTomos(self) -> None:
+        outTomoSet = getattr(self, OUT_TOMO, None)
+        if outTomoSet:
+            for ts in outTomoSet:
+                self.TS_read.append(ts.getTsId())
+            self.info(cyanStr(f'TsIds processed: {self.TS_read}'))
+        else:
+            self.info(cyanStr('No tilt-series have been processed yet'))
+
+    def __readingOutPutTsSet(self) -> None:
+        outTsSet = getattr(self, OUT_TS, None)
+        if outTsSet:
+            for ts in outTsSet:
+                self.TS_read.append(ts.getTsId())
+            self.info(cyanStr(f'TsIds processed: {self.TS_read}'))
+        else:
+            self.info(cyanStr('No tilt-series have been processed yet'))
+
 
     @staticmethod
     def readThicknessFile(filePath: os.PathLike):
