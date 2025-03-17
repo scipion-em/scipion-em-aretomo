@@ -349,25 +349,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             for ts in inTsSet.iterItems():
                 if ts.getTsId() not in self.TS_read and ts.getSize() > 0:  # Avoid processing empty TS (before the Tis are added)
                     tsId = ts.getTsId()
-                    try:
-                        with self._lock:
-                            fName = ts.getFirstItem().getFileName()
-                        args = (tsId, fName)
-                        convertInput = self._insertFunctionStep(self.convertInputStep, *args,
-                                                                prerequisites=[],
-                                                                needsGPU=False)
-                        runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
-                                                              prerequisites=[convertInput],
-                                                              needsGPU=True)
-                        createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
-                                                                 prerequisites=[runAreTomo],
-                                                                 needsGPU=False)
-                        closeSetStepDeps.append(createOutputS)
-                        self.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
-                        self.TS_read.append(tsId)
-                    except Exception as e:
-                        self.error(f'tsId = {tsId} -> Error reading TS info: {e}')
-                        self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
+                    # try:
+                    with self._lock:
+                        fName = ts.getFirstItem().getFileName()
+                    args = (tsId, fName)
+                    convertInput = self._insertFunctionStep(self.convertInputStep, *args,
+                                                            prerequisites=[],
+                                                            needsGPU=False)
+                    runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
+                                                          prerequisites=[convertInput],
+                                                          needsGPU=True)
+                    createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
+                                                             prerequisites=[runAreTomo],
+                                                             needsGPU=False)
+                    closeSetStepDeps.append(createOutputS)
+                    self.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
+                    self.TS_read.append(tsId)
+                    # except Exception as e:
+                    #     self.error(f'tsId = {tsId} -> Error reading TS info: {e}')
+                    #     self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
 
             time.sleep(10)
             if inTsSet.isStreamOpen():
