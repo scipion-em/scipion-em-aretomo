@@ -349,7 +349,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             for ts in inTsSet.iterItems():
                 if ts.getTsId() not in self.TS_read and ts.getSize() > 0:  # Avoid processing empty TS (before the Tis are added)
                     tsId = ts.getTsId()
-                    # try:
                     with self._lock:
                         fName = ts.getFirstItem().getFileName()
                     args = (tsId, fName)
@@ -365,9 +364,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     closeSetStepDeps.append(createOutputS)
                     self.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
                     self.TS_read.append(tsId)
-                    # except Exception as e:
-                    #     self.error(f'tsId = {tsId} -> Error reading TS info: {e}')
-                    #     self.error(f'ts.getFirstItem(): {ts.getFirstItem()}')
 
             time.sleep(10)
             if inTsSet.isStreamOpen():
@@ -445,6 +441,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         with self._lock:
             if tsId in self._failedTsList:
                 self.createOutputFailedTs(tsId)
+                failedTsSet = getattr(self, FAILED_TS, None)
+                if failedTsSet:
+                    failedTsSet.close()
             else:
                 self.createOutputTs(tsId, tsFn)
             for outputName in self._possibleOutputs.keys():
