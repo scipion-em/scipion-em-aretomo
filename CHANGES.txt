@@ -1,3 +1,14 @@
+3.10.2:
+ Users:
+  - Fix odd/even functionality.
+  - Fix the write aln file method so it works no matter if the tilt-series header identifies it as a stack
+    or as a volume.
+ Developers:
+  - Add some preventing locks in the steps generator step to prevent the recursive use of cursors that makes
+    streamified protocols to close the output before expected.
+  - Replace the setup.py by the corresponding pyproject.toml.
+  - Improve the method readingOutput.
+  - Improve robustness in streaming: check the tilt-series size before inserting the steps.
 3.10.1:
  Users:
   - Fix: re-align aligned tilt-series after having excluded views is now possible (validation is now a warning).
@@ -12,6 +23,7 @@
   - Tests renewed with a better adapted (real dark frames) test dataset and with cases of TS with excluded views.
   - Add needsgpu attribute to the steps generation.
   - Aln file writer method added to adapt the plugin to the API of AreTomo2-1.1.3 when only reconstructing the tomograms.
+  - Fix indirect pointers.
 3.9.5: add aretomo2 1.1.3
 3.9.4: set aretomo2 1.0.0 as default, because 1.1.2 has broken remove dark option
 3.9.3: hotfix: _defineVariables method must be a class method to be compatible with scipion command config -p
