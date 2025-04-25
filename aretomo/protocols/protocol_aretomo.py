@@ -806,8 +806,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         extraPrefix = self._getExtraPath(tsId)
         tmpPrefix = self._getTmpPath(tsId)
+        align = False
+        recTomo= True
+        estimateCtf = False
         if even is None:
             outFile = self.getFilePath(tsFn, extraPrefix, ext=MRC_EXT)
+            align = 0 if self.skipAlign else 1
+            recTomo = self.makeTomo
+            estimateCtf = self.doEstimateCtf.get()
         elif even:
             outFile = self.getFilePath(tsFn, extraPrefix, suffix=EVEN, ext=MRC_EXT)
         else:
@@ -817,11 +823,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-InMrc': tsFn,
             '-OutMrc': outFile,
             '-OutImod': self.outImod.get(),
-            '-Align': 0 if self.skipAlign else 1,
-            '-VolZ': self.tomoThickness if self.makeTomo else 0,
+            '-Align': align,
+            '-VolZ': self.tomoThickness if recTomo else 0,
             '-OutBin': self.binFactor,
             '-FlipInt': 1 if self.flipInt else 0,
-            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
+            '-FlipVol': 1 if recTomo and self.flipVol else 0,
             '-PixSize': ts.getSamplingRate(),
             '-Kv': acq.getVoltage(),
             '-DarkTol': self.darkTol.get(),
@@ -831,7 +837,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if self.doDW:
             args['-ImgDose'] = acq.getDosePerFrame()
 
-        if not self.skipAlign:
+        if not align:
             args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ext=".tlt")
             if self.alignZfile.get():
                 # Check if we have AlignZ information per tilt-series
@@ -839,7 +845,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             else:
                 args['-AlignZ'] = self.alignZ
 
-        if self.makeTomo:
+        if recTomo:
             if self.skipAlign:
                 args['-InMrc'] = tsFn
                 args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
@@ -848,7 +854,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             else:
                 args['-Wbp'] = 1
 
-        if self.doEstimateCtf.get() and even is None:
+        if estimateCtf:
             # Manage the CTF estimation:
             # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
             # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
