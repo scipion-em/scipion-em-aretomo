@@ -846,7 +846,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 args['-AlignZ'] = self.alignZ
 
         if recTomo:
-            if self.skipAlign:
+            if not align:
                 args['-InMrc'] = tsFn
                 args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
             if self.reconMethod == RECON_SART:
