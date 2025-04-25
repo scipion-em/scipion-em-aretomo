@@ -806,7 +806,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         extraPrefix = self._getExtraPath(tsId)
         tmpPrefix = self._getTmpPath(tsId)
-        align = False
+        align = 0
         recTomo= True
         estimateCtf = False
         if even is None:
