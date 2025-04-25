@@ -837,7 +837,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if self.doDW:
             args['-ImgDose'] = acq.getDosePerFrame()
 
-        if not align:
+        if align:
             args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ext=".tlt")
             if self.alignZfile.get():
                 # Check if we have AlignZ information per tilt-series
