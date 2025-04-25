@@ -419,7 +419,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             ts = self.getTsFromTsId(tsId)
             program = Plugin.getProgram()
             tmpPrefix = self._getTmpPath(tsId)
-            inTsFn = self.getFilePath(tsFn, tmpPrefix, ext=MRC_EXT),
+            inTsFn = self.getFilePath(tsFn, tmpPrefix, ext=MRC_EXT)
             param = self._genAretomoCmd(ts, inTsFn, tsId)
             self.runJob(program, param, env=Plugin.getEnviron())
             if self.doEvenOdd.get():
