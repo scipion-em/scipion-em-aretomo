@@ -70,10 +70,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         FAILED_TS: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms,
                         OUT_CTFS: SetOfCTFTomoSeries}
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.TS_read = []
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
