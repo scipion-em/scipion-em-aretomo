@@ -31,7 +31,7 @@ version = {attr = "aretomo.__version__"}
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.package-data]
-"aretomo" = ["protocols.conf", "icon.png", "templates/*"]
+"aretomo" = ["protocols.conf", "aretomo_logo.png", "templates/*"]
 
 [project.entry-points."pyworkflow.plugin"]
 aretomo = "aretomo"
