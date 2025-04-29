@@ -3,6 +3,7 @@
   - Fix odd/even functionality.
   - Fix the write aln file method so it works no matter if the tilt-series header identifies it as a stack
     or as a volume.
+  - Fix the even/odd functionality.
  Developers:
   - Add some preventing locks in the steps generator step to prevent the recursive use of cursors that makes
     streamified protocols to close the output before expected.
