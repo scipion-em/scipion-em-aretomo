@@ -1,3 +1,6 @@
+3.10.3:
+ Users:
+  - Fix the even/odd functionality.
 3.10.2:
  Users:
   - Fix odd/even functionality.

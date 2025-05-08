@@ -41,7 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, removeBaseExt, getExt
+from pyworkflow.utils import Message, cyanStr, removeBaseExt, getExt, createLink
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -70,10 +70,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         FAILED_TS: SetOfTiltSeries,
                         OUT_TOMO: SetOfTomograms,
                         OUT_CTFS: SetOfCTFTomoSeries}
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.TS_read = []
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
@@ -378,20 +378,21 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         extraPrefix = self._getExtraPath(tsId)
         tmpPrefix = self._getTmpPath(tsId)
-        pwutils.makePath(tmpPrefix)
-        pwutils.makePath(extraPrefix)
+        pwutils.makePath(*[tmpPrefix, extraPrefix])
+        outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
 
         if self.skipAlign:
             if self.makeTomo:
-                writeAlnFile(ts, tsFn, self.getAlnFile(tsFn, tsId))
+                createLink(tsFn, outputTsFileName)
+                alnFile = self.getAlnFile(tsFn, tsId)
+                writeAlnFile(ts, tsFn, alnFile)
         else:
             # Apply the transformation for the input tilt-series
-            outputTsFileName = self.getFilePath(tsFn, tmpPrefix, ext=MRC_EXT)
             rotationAngle = ts.getAcquisition().getTiltAxisAngle()
             doSwap = 45 < abs(rotationAngle) < 135
             if self.doEvenOdd.get():
-                outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, ext=MRC_EXT)
-                outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, ext=MRC_EXT)
+                outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
                 ts.applyTransformToAll(outputTsFileName,
                                        swapXY=doSwap,
                                        presentAcqOrders=presentAcqOrders,
@@ -402,7 +403,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                   presentAcqOrders=presentAcqOrders)
 
             # Generate angle file
-            angleFilePath = self.getFilePath(tsFn, tmpPrefix, ext=".tlt")
+            angleFilePath = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".tlt")
             ts.generateTltFile(angleFilePath,
                                presentAcqOrders=presentAcqOrders,
                                includeDose=self.doDW.get())
@@ -418,12 +419,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         try:
             ts = self.getTsFromTsId(tsId)
             program = Plugin.getProgram()
-            param = self._genAretomoCmd(ts, tsFn, tsId)
+            tmpPrefix = self._getTmpPath(tsId)
+            inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+            param = self._genAretomoCmd(ts, inTsFn, tsId)
             self.runJob(program, param, env=Plugin.getEnviron())
             if self.doEvenOdd.get():
                 tmpPrefix = self._getTmpPath(tsId)
-                inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, ext=MRC_EXT)
-                inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, ext=MRC_EXT)
+                inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
                 # Odd
                 self.info(cyanStr(f'------- runAreTomoStep ts_id: {tsId} ODD'))
                 param = self._genAretomoCmd(ts, inTsFnOdd, tsId, even=False)
@@ -519,7 +522,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             # values, see comment above).
             #
             # Hence, the output tilt angles will be checked before storing the corresponding outputs
-            tomoFileName = self.getFilePath(tsFn, extraPrefix, ext=MRC_EXT)
+            tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
             tomoDims = self._getOutputDim(tomoFileName)
             if np.any(np.array(tomoDims) == len(ts)):
                 msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
@@ -538,8 +541,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             newTomogram.setTsId(tsId)
             newTomogram.setCtfCorrected(ts.ctfCorrected())
             if self.doEvenOdd.get():
-                newTomogram.setHalfMaps([self.getFilePath(tsFn, extraPrefix, suffix=ODD, ext=MRC_EXT),
-                                         self.getFilePath(tsFn, extraPrefix, suffix=EVEN, ext=MRC_EXT)])
+                newTomogram.setHalfMaps([self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT),
+                                         self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)])
             outputSetOfTomograms.append(newTomogram)
             outputSetOfTomograms.update(newTomogram)
             outputSetOfTomograms.write()
@@ -571,7 +574,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         tiltAngleList.append(tiltAngle)
                         newTi.setTiltAngle(tiltAngle)
                         newTi.setLocation(secIndex + 1,
-                                          (self.getFilePath(tsFn, extraPrefix, ext=MRC_EXT)))
+                                          (self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)))
                         newTi.setSamplingRate(self._getOutputSampling())
                         newTs.append(newTi)
                         # If the interpolated TS was generated considering the dose weighting, it's accumulated dose
@@ -621,7 +624,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self._store(outTsAligned)
             else:
                 # remove aligned stack from output
-                pwutils.cleanPath(self.getFilePath(tsFn, extraPrefix, ext=MRC_EXT))
+                pwutils.cleanPath(self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT))
 
         # Save original TS stack with new alignment,
         # unless making a tomo from pre-aligned TS
@@ -683,7 +686,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 newCTFTomoSeries.setTsId(tsId)
                 outputCtfs.append(newCTFTomoSeries)
 
-                aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, suffix="ctf", ext=".txt")
+                aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix="ctf", ext=".txt")
                 psdFile = pwutils.replaceExt(aretomoCtfFile, 'mrc')
                 psdFile = psdFile if os.path.exists(psdFile) else None
                 ctfResult = AretomoCtfParser.readAretomoCtfOutput(aretomoCtfFile)
@@ -804,22 +807,28 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         extraPrefix = self._getExtraPath(tsId)
         tmpPrefix = self._getTmpPath(tsId)
+        align = 0
+        recTomo= True
+        estimateCtf = False
         if even is None:
-            outFile = self.getFilePath(tsFn, extraPrefix, ext=MRC_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
+            align = 0 if self.skipAlign else 1
+            recTomo = self.makeTomo
+            estimateCtf = self.doEstimateCtf.get()
         elif even:
-            outFile = self.getFilePath(tsFn, extraPrefix, suffix=EVEN, ext=MRC_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)
         else:
-            outFile = self.getFilePath(tsFn, extraPrefix, suffix=ODD, ext=MRC_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT)
 
         args = {
-            '-InMrc': self.getFilePath(tsFn, tmpPrefix, ext=MRC_EXT),
+            '-InMrc': tsFn,
             '-OutMrc': outFile,
             '-OutImod': self.outImod.get(),
-            '-Align': 0 if self.skipAlign else 1,
-            '-VolZ': self.tomoThickness if self.makeTomo else 0,
+            '-Align': align,
+            '-VolZ': self.tomoThickness if recTomo else 0,
             '-OutBin': self.binFactor,
             '-FlipInt': 1 if self.flipInt else 0,
-            '-FlipVol': 1 if self.makeTomo and self.flipVol else 0,
+            '-FlipVol': 1 if recTomo and self.flipVol else 0,
             '-PixSize': ts.getSamplingRate(),
             '-Kv': acq.getVoltage(),
             '-DarkTol': self.darkTol.get(),
@@ -829,16 +838,16 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if self.doDW:
             args['-ImgDose'] = acq.getDosePerFrame()
 
-        if not self.skipAlign:
-            args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, ext=".tlt")
+        if align:
+            args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".tlt")
             if self.alignZfile.get():
                 # Check if we have AlignZ information per tilt-series
                 args['-AlignZ'] = self.perTsAlignZ.get(tsId, self.alignZ)
             else:
                 args['-AlignZ'] = self.alignZ
 
-        if self.makeTomo:
-            if self.skipAlign:
+        if recTomo:
+            if not align:
                 args['-InMrc'] = tsFn
                 args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
             if self.reconMethod == RECON_SART:
@@ -846,7 +855,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             else:
                 args['-Wbp'] = 1
 
-        if self.doEstimateCtf.get() and even is None:
+        if estimateCtf:
             # Manage the CTF estimation:
             # In AreTomo2, parameters PixSize, Kv and Cs are required to estimate the CTF. Since the first two are
             # also used for the dose weighting and the third is only used for the CTF estimation, we'll use it as
@@ -924,26 +933,29 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
     @staticmethod
     def getFilePath(tsFn: Union[str, os.PathLike],
                     prefix: str,
+                    tsId: str,
                     suffix: Optional[str] = '',
                     ext: Optional[str] = None) -> Union[str, os.PathLike]:
         # fileName, fileExtension = os.path.splitext(os.path.basename(tsFn))
-        baseName = removeBaseExt(tsFn).replace(EVEN, '').replace(ODD, '')
+        # baseName = removeBaseExt(tsFn).replace(EVEN, '').replace(ODD, '')
         fileExtension = ext if ext else getExt(tsFn)
         if suffix:
             suffix = suffix if suffix.startswith('_') else '_' + suffix
-        return os.path.join(prefix, baseName + suffix + fileExtension)
+        return os.path.join(prefix, tsId + suffix + fileExtension)
 
     def getFilePathEven(self,
                         tsFn: Union[str, os.PathLike],
                         prefix: str,
+                        tsId: str,
                         ext: str = MRC_EXT) -> Union[str, os.PathLike]:
-        return self.getFilePath(tsFn, prefix, suffix=EVEN, ext=ext)
+        return self.getFilePath(tsFn, prefix, tsId, suffix=EVEN, ext=ext)
 
     def getFilePathOdd(self,
-                        tsFn: Union[str, os.PathLike],
-                        prefix: str,
-                        ext: str = MRC_EXT) -> Union[str, os.PathLike]:
-        return self.getFilePath(tsFn, prefix, suffix=ODD, ext=ext)
+                       tsFn: Union[str, os.PathLike],
+                       prefix: str,
+                       tsId: str,
+                       ext: str = MRC_EXT) -> Union[str, os.PathLike]:
+        return self.getFilePath(tsFn, prefix, tsId, suffix=ODD, ext=ext)
 
     def getOutputSetOfTomograms(self) -> SetOfTomograms:
         outputSetOfTomograms = getattr(self, OUT_TOMO, None)
@@ -1050,8 +1062,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
 
 
-    def getAlnFile(self, tsFn, tsId):
-        return self.getFilePath(tsFn, self._getExtraPath(tsId), ext=".aln")
+    def getAlnFile(self, tsFn: str, tsId: str):
+        return self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=".aln")
 
     @staticmethod
     def _getIndexAssignDict(ts: TiltSeries) -> dict:
