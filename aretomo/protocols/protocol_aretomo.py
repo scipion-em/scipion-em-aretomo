@@ -687,12 +687,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             summary.append('*WARNING!*\nSome tilt series were skipped because of a bad reconstruction:' +
                            self.badTomoRecMsg.get())
 
-        # if self._saveInterpolated() and not self.makeTomo and self.excludedViewsMsg.get():
-        #     summary.append("*Interpolated TS stacks have a few tilt images removed (could be because "
-        #                    "they were marked in the input tilt-series as disabled or because of "
-        #                    "AreTomo's dark tolerance threshold).*\n" +
-        #                    self.excludedViewsMsg.get())
-
         return summary
 
     def _validate(self) -> List[str]:
@@ -949,9 +943,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         ih = ImageHandler()
         x, y, z, _ = ih.getDimensions(fn)
         return x, y, z
-
-    # def _saveInterpolated(self) -> bool:
-    #     return self.saveStack
 
     def getOutputFailedSetOfTiltSeries(self, inputSet):
         failedTsSet = getattr(self, FAILED_TS, None)
