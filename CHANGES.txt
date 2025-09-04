@@ -1,3 +1,9 @@
+3.11.0:
+ Users: interpolated tilt-series removed. The viewers manage from scipion-em-tomo 3.10.1 the interpolation.
+ Developers:
+  - Adapted to the updated TiltSeries model from scipion-em-tomo 3.10.1.
+  - Streaming reviewed and made more robust.
+  - Interpolated tilt-series checking removed from the tests.
 3.10.3:
  Users:
   - Fix the even/odd functionality.
