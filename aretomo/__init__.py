@@ -92,7 +92,8 @@ class Plugin(pwem.Plugin):
     @classmethod
     def getProgram(cls) -> str:
         """ Return the program binary that will be used. """
-        return cls.getHome('bin', cls.getVar(ARETOMO_BIN))
+        return cls.getHome(cls.getVar(ARETOMO_BIN))
+        # return cls.getHome('bin', cls.getVar(ARETOMO_BIN))
 
     @classmethod
     def defineBinaries(cls, env):

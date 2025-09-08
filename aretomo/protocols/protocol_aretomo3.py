@@ -25,20 +25,22 @@
 # **************************************************************************
 import logging
 import os
+from os.path import join, exists
+
 import numpy as np
 import time
-from typing import List, Literal, Tuple, Union, Optional
-from pwem import ALIGN_NONE, ALIGN_2D
-from pyworkflow.protocol import params, STEPS_PARALLEL, BooleanParam, IntParam, PointerParam, LEVEL_ADVANCED, FileParam, \
+from typing import List, Tuple, Union, Optional
+from pwem import ALIGN_2D
+from pyworkflow.protocol import STEPS_PARALLEL, BooleanParam, IntParam, PointerParam, LEVEL_ADVANCED, FileParam, \
     EnumParam, FloatParam, StringParam, GPU_LIST
-from pyworkflow.constants import PROD, BETA
+from pyworkflow.constants import BETA
 from pyworkflow.object import Set, String, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, removeBaseExt, getExt, createLink, redStr
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -46,7 +48,7 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile
 from ..convert.dataimport import AretomoCtfParser
-from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
+from ..constants import RECON_SART
 
 logger = logging.getLogger(__name__)
 
@@ -194,12 +196,15 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                        label='Estimate the CTF?',
                        condition=doAlignTs)
         group.addParam('doCorrCtf', BooleanParam,
-                       default='If set to Yes, local CTF correction is performed on '
-                               'the raw tilt series. It enables local CTF deconvolution '
-                               'of each tilt image. A tilt image is first divided into tiles. '
-                               'Each tile has its own CTF based on its location from the tilt-axis. '
-                               'CTF deconvolution is done on each tile. Then CTF deconvolved tiles '
-                               'are put together to form the CTF deconvolved image.')
+                       condition=f'{doAlignTs} and doEstimateCtf',
+                       label='Do local CTF correction?',
+                       default=False,
+                       help='If set to Yes, local CTF correction is performed on '
+                            'the raw tilt series. It enables local CTF deconvolution '
+                            'of each tilt image. A tilt image is first divided into tiles. '
+                            'Each tile has its own CTF based on its location from the tilt-axis. '
+                            'CTF deconvolution is done on each tile. Then CTF deconvolved tiles '
+                            'are put together to form the CTF deconvolved image.')
         group.addParam('doPhaseShiftSearch', BooleanParam,
                        default=False,
                        label='Do phase shift estimation?',
@@ -319,6 +324,18 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         It should check its input and when ready conditions are met
         call the self._insertFunctionStep method.
         """
+        # JORGE
+        import os
+        fname = "/home/jjimenez/test_JJ.txt"
+        if os.path.exists(fname):
+            os.remove(fname)
+        fjj = open(fname, "a+")
+        fjj.write('JORGE--------->onDebugMode PID {}'.format(os.getpid()))
+        fjj.close()
+        print('JORGE--------->onDebugMode PID {}'.format(os.getpid()))
+        import time
+        time.sleep(10)
+        # JORGE_END
         closeSetStepDeps = []
         inTsSet = self._getSetOfTiltSeries()
         self.readingOutput()
@@ -355,19 +372,19 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             time.sleep(10)
             if inTsSet.isStreamOpen():
                 with self._lock:
-                    inTsSet.loadAllProperties() # refresh status for the streaming
+                    inTsSet.loadAllProperties()  # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, tsId: str, tsFn: str):
         try:
-            logger.info(cyanStr(f'tsId = {tsId} ------- converting the inputs...'))
+            logger.info(cyanStr(f'tsId = {tsId} -> converting the inputs...'))
             ts = self.getTsFromTsId(tsId)
-    
+
             extraPrefix = self._getExtraPath(tsId)
             tmpPrefix = self._getTmpPath(tsId)
             pwutils.makePath(*[tmpPrefix, extraPrefix])
             outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-    
+
             if self.skipAlign:
                 if self.makeTomo:
                     createLink(tsFn, outputTsFileName)
@@ -381,19 +398,22 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                            outFileNamesEvenOdd=[outputTsFnEven, outputTsFnOdd])
                 else:
                     ts.applyTransform(outputTsFileName)
-    
-                # Generate angle file
+
+                # Generate angle file:
+                # AreTomo3 assumes tilt angles are saved in a text file that shares the same file name but ended with
+                # either .rawtilt of _TLT.txt. The tilt series file and the associated tilt angle file must be in the
+                # same directory.
                 presentAcqOrders = ts.getTsPresentAcqOrders()
-                angleFilePath = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".tlt")
+                angleFilePath = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".rawtlt")
                 ts.generateTltFile(angleFilePath,
                                    presentAcqOrders=presentAcqOrders,
                                    includeDose=self.doDW.get())  # TODO: check the dose in the tlt as now it works with the dose of the raw frames
-    
+
                 if self.alignZfile.hasValue():
                     alignZfile = self.alignZfile.get()
-                    if os.path.exists(alignZfile):
+                    if exists(alignZfile):
                         self.perTsAlignZ = self.readThicknessFile(alignZfile)
-                        
+
         except Exception as e:
             self.failedItems.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
@@ -401,7 +421,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
     def runAreTomoStep(self, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
         if tsId not in self.failedItems:
-            logger.info(cyanStr(f'tsId ={tsId}------- running AreTomo...'))
+            logger.info(cyanStr(f'tsId ={tsId} -> running AreTomo...'))
             try:
                 ts = self.getTsFromTsId(tsId)
                 program = Plugin.getProgram()
@@ -430,19 +450,18 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
     def createOutputStep(self, tsId: str, tsFn: str):
         if tsId in self.failedItems:
             self.createOutputFailedTs(tsId)
-        else:
-            self.createOutputTs(tsId, tsFn)
-            # Close explicitly the outputs (for streaming)
-            for outputName in self._possibleOutputs.keys():
-                output = getattr(self, outputName, None)
-                if output:
-                    output.close()
+            return
+        logger.info(cyanStr(f'tsId = {tsId} -> creating the outputs...'))
+        self.createOutputs(tsId, tsFn)
+        # Close explicitly the outputs (for streaming)
+        for outputName in self._possibleOutputs.keys():
+            output = getattr(self, outputName, None)
+            if output:
+                output.close()
 
-    def createOutputTs(self, tsId: str, tsFn: str):
+    def createOutputs(self, tsId: str, tsFn: str):
         try:
             with self._lock:
-                logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
-
                 ts = self.getTsFromTsId(tsId, doLock=False)
                 extraPrefix = self._getExtraPath(tsId)
                 AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
@@ -480,7 +499,8 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
                     #
                     # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                    inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
+                    inTiltAngles = np.array(
+                        [ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
                     aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
                     if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
                         msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
@@ -508,7 +528,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     # values, see comment above).
                     #
                     # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                    tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
+                    tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, suffix='_Vol', ext=MRC_EXT)
                     tomoDims = self._getOutputDim(tomoFileName)
                     if np.any(np.array(tomoDims) == len(ts)):
                         msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
@@ -597,9 +617,9 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         newCTFTomoSeries.setTsId(tsId)
                         outputCtfs.append(newCTFTomoSeries)
 
-                        aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix="ctf", ext=".txt")
+                        aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix="CTF", ext=".txt")
                         psdFile = pwutils.replaceExt(aretomoCtfFile, 'mrc')
-                        psdFile = psdFile if os.path.exists(psdFile) else None
+                        psdFile = psdFile if exists(psdFile) else None
                         ctfResult = AretomoCtfParser.readAretomoCtfOutput(aretomoCtfFile)
 
                         for i, tiltImage in enumerate(ts.iterItems()):
@@ -624,7 +644,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the output with exception {e}. Skipping... '))
 
     def createOutputFailedTs(self, tsId: str):
-        logger.info(cyanStr(f'Failed TS ---> {tsId}'))
+        logger.info(cyanStr(f'Failed TS -> {tsId}'))
         try:
             with self._lock:
                 ts = self.getTsFromTsId(tsId, doLock=False)
@@ -709,9 +729,8 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         warnMsgs = []
         if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
             warnMsgs.append("Input tilt-series already have alignment "
-                          "information. You probably want to skip the alignment step.")
+                            "information. You probably want to skip the alignment step.")
         return warnMsgs
-
 
     # --------------------------- UTILS functions -----------------------------
     def _genAretomoCmd(self,
@@ -736,16 +755,11 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             '-FlipInt': 1 if self.flipInt else 0,  # Flip the intensity
             '-DarkTol': self.darkTol.get(),  # Tolerance for removing dark images
             '-OutImod': self.outImod.get(),
-            '-FmDose':self.dosePerRawFrame.get(),
+            '-FmDose': self.dosePerRawFrame.get(),
             '-Gpu': '%(GPU)s'
         }
 
         if align:
-            # TODO: AngFile does not exists anymore
-            # AreTomo3 assumes tilt angles are saved in a text file that shares the same file name but ended with
-            # either .rawtilt of _TLT.txt. The tilt series file and the associated tilt angle file must be in the same
-            # directory.
-            # args['-AngFile'] = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".tlt")
             # Volume height for alignment
             if self.alignZfile.get():
                 # Check if we have AlignZ information per tilt-series
@@ -754,8 +768,8 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 args['-AlignZ'] = self.alignZ
 
         if recTomo:
-            if not align:
-                args['-AtBin'] = self.binFactor.get()
+            # if not align:
+            args['-AtBin'] = self.binFactor.get()
                 # args['-InMrc'] = tsFn
                 # args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
             if self.reconMethod == RECON_SART:
@@ -783,7 +797,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         # Local alignment management
         if self.doLocalAli.get():
-            args['-Patch'] = f"{self.patchX} {self.patchY}"
+            args['-AtPatch'] = f"{self.patchX} {self.patchY}"
 
         # TODO: check param ExtZ to estimate the sample thickness
         # TODO: check param ReconRange
@@ -791,7 +805,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         # TODO: check param IntpCor
 
         param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
-        param += ' ' + self.extraget()
+        param += ' ' + self.extraParams.get()
         return param
 
     def readingOutput(self) -> None:
@@ -799,7 +813,6 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self.__readingOutPutTomos()
         else:
             self.__readingOutPutTsSet()
-
 
     def __readingOutPutTomos(self) -> None:
         outTomoSet = getattr(self, OUT_TOMO, None)
@@ -818,7 +831,6 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             logger.info(cyanStr(f'TsIds processed: {self.TS_read}'))
         else:
             logger.info(cyanStr('No tilt-series have been processed yet'))
-
 
     @staticmethod
     def readThicknessFile(filePath: os.PathLike):
@@ -849,7 +861,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         fileExtension = ext if ext else getExt(tsFn)
         if suffix:
             suffix = suffix if suffix.startswith('_') else '_' + suffix
-        return os.path.join(prefix, tsId + suffix + fileExtension)
+        return join(prefix, tsId + suffix + fileExtension)
 
     def getFilePathEven(self,
                         tsFn: Union[str, os.PathLike],
@@ -912,7 +924,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             self._defineSourceRelation(inTsPointer, outputCtfs)
         return outputCtfs
 
-    def _getSetOfTiltSeries(self, isPointer: bool=False) -> Union[Pointer, SetOfTiltSeries]:
+    def _getSetOfTiltSeries(self, isPointer: bool = False) -> Union[Pointer, SetOfTiltSeries]:
         if isPointer:
             return self.inputSetOfTiltSeries
         else:
@@ -954,7 +966,6 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
         else:
             return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
-
 
     def getAlnFile(self, tsFn: str, tsId: str):
         return self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=".aln")
