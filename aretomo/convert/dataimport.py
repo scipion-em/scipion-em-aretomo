@@ -82,6 +82,7 @@ class AretomoCtfParser:
         :param psdFile: psd file name, including the path.
         """
         values = ctfArray[item]
+        nFields = len(values)
         ctfPhaseShift = 0
         ctfFit = -999
         resolution = -999
@@ -89,18 +90,27 @@ class AretomoCtfParser:
             logger.debug(f"Invalid CTF values: {values}")
             ctfModel.setWrongDefocus()
         else:
-            # 1 - micrograph number
-            # 2 - defocus 1 [A]
-            # 3 - defocus 2
-            # 4 - azimuth of astigmatism
-            # 5 - additional phase shift [radian]
-            # 6 - cross correlation
-            # 7 - spacing (in Angstroms) up to which CTF rings were fit successfully.
-            # From a conversation with B. K. regarding the resolution value: "I think it is column #7. I believe that
-            # Shawn was hesitant to call it resolution, as in his view the resolution might be higher, but it states
-            # the resolution to which the ctf fit is reliable. In the end, I believe that the indication by ctffind
-            # is similar"
-            tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, resolution = values
+            if nFields == 7:  # AreTomo2
+                # 1 - micrograph number
+                # 2 - defocus 1 [A]
+                # 3 - defocus 2
+                # 4 - azimuth of astigmatism
+                # 5 - additional phase shift [radian]
+                # 6 - cross correlation
+                # 7 - spacing (in Angstroms) up to which CTF rings were fit successfully.
+                # From a conversation with B. K. regarding the resolution value: "I think it is column #7. I believe that
+                # Shawn was hesitant to call it resolution, as in his view the resolution might be higher, but it states
+                # the resolution to which the ctf fit is reliable. In the end, I believe that the indication by ctffind
+                # is similar"
+                tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, resolution = values
+            elif nFields == 8:  # AreTomo3
+                # Same fields as in AreTomo2, but adding the handedness of the defocus
+                # 8 - dfHand
+                tiNum, defocusV, defocusU, defocusAngle, ctfPhaseShift, ctfFit, resolution, defocusHand = values
+            else:
+                raise Exception(f'Number of CTF fields read from the generated CTF file [{nFields}] should '
+                                f'be 7 for AreTomo2 and 8 for AreTomo3.')
+
             ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
         ctfModel.setFitQuality(ctfFit)
         ctfModel.setResolution(resolution)

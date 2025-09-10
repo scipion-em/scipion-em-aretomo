@@ -25,6 +25,7 @@
 # **************************************************************************
 import logging
 import os
+import traceback
 from os.path import join, exists
 
 import numpy as np
@@ -264,26 +265,6 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                            "making a tilt-series. This way the output orientation "
                            "will be similar to IMOD.")
 
-        # form.addParam('roiArea', StringParam, default='',
-        #               condition=doAlignTs,
-        #               expertLevel=LEVEL_ADVANCED,
-        #               label="ROI for focused alignment",
-        #               help="By default AreTomo assumes the region of interest "
-        #                    "at the center of 0º projection image. A circular "
-        #                    "mask is employed to down-weight the area outside "
-        #                    "ROI during the alignment. When the structures of "
-        #                    "interest are far away from the tilt axis, the "
-        #                    "angular error in the determination of tilt axis "
-        #                    "will significantly amplify the translational error. "
-        #                    "ROI function can effectively improve the alignment "
-        #                    "accuracy for the distant structures.\nHere you can "
-        #                    "provide *a pair of x and y coordinates*, representing "
-        #                    "the center of the region of interest.\n"
-        #                    "The region of interest should be selected from 0º "
-        #                    "projection image with the origin at the lower left "
-        #                    "corner. IMOD's Pixel View is a good tool to select "
-        #                    "the center of region of interest.")
-
         group = form.addGroup('Patch-based local alignment')
         form.addParam('doLocalAli', BooleanParam,
                       default=False,
@@ -324,18 +305,6 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         It should check its input and when ready conditions are met
         call the self._insertFunctionStep method.
         """
-        # JORGE
-        import os
-        fname = "/home/jjimenez/test_JJ.txt"
-        if os.path.exists(fname):
-            os.remove(fname)
-        fjj = open(fname, "a+")
-        fjj.write('JORGE--------->onDebugMode PID {}'.format(os.getpid()))
-        fjj.close()
-        print('JORGE--------->onDebugMode PID {}'.format(os.getpid()))
-        import time
-        time.sleep(10)
-        # JORGE_END
         closeSetStepDeps = []
         inTsSet = self._getSetOfTiltSeries()
         self.readingOutput()
@@ -417,6 +386,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except Exception as e:
             self.failedItems.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
 
     def runAreTomoStep(self, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
@@ -429,23 +399,11 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
                 param = self._genAretomoCmd(ts, inTsFn, tsId)
                 self.runJob(program, param, env=Plugin.getEnviron())
-                # if self.doEvenOdd.get():
-                #     tmpPrefix = self._getTmpPath(tsId)
-                #     inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-                #     inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-                #     # Odd
-                #     logger.info(cyanStr(f'tsOd = {tsId} ------- running Aretomo [ODD Tilt-series]...'))
-                #     param = self._genAretomoCmd(ts, inTsFnOdd, tsId, even=False)
-                #     self.runJob(program, param, env=Plugin.getEnviron())
-                #     # Even
-                #     logger.info(cyanStr(f'tsOd = {tsId} ------- running Aretomo [EVEN Tilt-series]...'))
-                #     param = self._genAretomoCmd(ts, inTsFnEven, tsId, even=True)
-                #     self.runJob(program, param, env=Plugin.getEnviron())
-
             except Exception as e:
                 self.failedItems.append(tsId)
                 logger.error(redStr(f'tsId = {tsId} -> AreTomo execution failed '
                                     f'with the exception -> {e}'))
+                logger.error(traceback.format_exc())
 
     def createOutputStep(self, tsId: str, tsFn: str):
         if tsId in self.failedItems:
@@ -467,8 +425,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
                 indexDict = self._getIndexAssignDict(ts)
                 finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
-                for newInd, origInd in indexDict.items():
-                    secNum = newInd - 1  # Indices begin in 1, sects in 0
+                for secNum, origInd in indexDict.items():
                     if secNum in AretomoAln.sections:
                         finalIndsAliDict[origInd] = AretomoAln.sections.index(secNum)
 
@@ -476,31 +433,9 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
                 if not (self.makeTomo and self.skipAlign):
-                    # We found the following behavior to be happening sometimes (non-systematically):
-                    # It can be observed that the tilt angles are badly set for the non-excluded views:
-                    #
-                    # AreTomo Alignment / Priims bprmMn
-                    # RawSize = 512 512 61
-                    # NumPatches = 0
-                    # DarkFrame =     0    0   -55.00
-                    # DarkFrame =     1    1   -53.00
-                    # DarkFrame =     2    2   -51.00
-                    # DarkFrame =     3    3   -49.00
-                    # DarkFrame =     4    4   -47.00
-                    # DarkFrame =     5    5   -45.00
-                    # DarkFrame =     6    6   -43.00
-                    # DarkFrame =    58   58    61.00
-                    # DarkFrame =    59   59    63.00
-                    # DarkFrame =    60   60    65.00
-                    # SEC     ROT         GMAG       TX          TY      SMEAN     SFIT    SCALE     BASE     TILT
-                    #     7   -10.6414    1.00000     30.409     -7.146     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     8   -10.6414    1.00000     25.102     -4.066     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     9   -10.6414    1.00000     28.247     -7.649     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #
-                    # Hence, the output tilt angles will be checked before storing the corresponding outputs
+                    # Check the output tilt angles before storing the corresponding outputs
                     inTiltAngles = np.array(
-                        [ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
+                        [ti.getTiltAngle() for ti in ts if ti.getIndex() in AretomoAln.sections])
                     aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
                     if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
                         msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
@@ -511,23 +446,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         return
 
                 if self.makeTomo:
-                    # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
-                    # related to graphic cards with a compute capability greater than 8.6. The behavior observed is detailed
-                    # below:
-                    #
-                    # The non-systematic behavior reported is based on the fact that the dimensions of the tomograms
-                    # reconstructed (bin 4) are:
-                    #
-                    # Sometimes both are well --> dimensions: 958 x 926 x 300
-                    # Sometimes both are wrong --> dimensions: 958 x no.TiltImages x 926
-                    # Sometimes one is well and the other wrong, changing the one which is well and the one which is wrong
-                    # across multiple executions.
-                    #
-                    # Until it's clarified, we'll check the dimensions of the generated tomogram and avoid storing the
-                    # corresponding results if it was badly generated (consequence of a bad alignment with weird tilt angle
-                    # values, see comment above).
-                    #
-                    # Hence, the output tilt angles will be checked before storing the corresponding outputs
+                    # Check the tomogram dims before storing the corresponding outputs
                     tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, suffix='_Vol', ext=MRC_EXT)
                     tomoDims = self._getOutputDim(tomoFileName)
                     if np.any(np.array(tomoDims) == len(ts)):
@@ -642,6 +561,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self._store(outputCtfs)
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def createOutputFailedTs(self, tsId: str):
         logger.info(cyanStr(f'Failed TS -> {tsId}'))
@@ -663,6 +583,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the failed output with '
                                 f'exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
