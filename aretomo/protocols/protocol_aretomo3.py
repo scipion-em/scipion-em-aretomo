@@ -26,6 +26,7 @@
 import logging
 import os
 import traceback
+import typing
 from os.path import join, exists
 
 import numpy as np
@@ -374,9 +375,10 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 # same directory.
                 presentAcqOrders = ts.getTsPresentAcqOrders()
                 angleFilePath = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".rawtlt")
-                ts.generateTltFile(angleFilePath,
-                                   presentAcqOrders=presentAcqOrders,
-                                   includeDose=self.doDW.get())  # TODO: check the dose in the tlt as now it works with the dose of the raw frames
+                self._genAretomo3TltFile(ts,
+                                         angleFilePath,
+                                         presentAcqOrders=presentAcqOrders,
+                                         includeDose=self.doDW.get())
 
                 if self.alignZfile.hasValue():
                     alignZfile = self.alignZfile.get()
@@ -691,8 +693,8 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if recTomo:
             # if not align:
             args['-AtBin'] = self.binFactor.get()
-                # args['-InMrc'] = tsFn
-                # args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
+            # args['-InMrc'] = tsFn
+            # args['-AlnFile'] = self.getAlnFile(tsFn, tsId)
             if self.reconMethod == RECON_SART:
                 args['-Sart'] = f"{self.SARTiter} {self.SARTproj}"
             else:
@@ -935,3 +937,57 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             return 0
         else:  # Refine 3 degrees
             return 1
+
+    @staticmethod
+    def _genAretomo3TltFile(ts: TiltSeries,
+                            tltFilePath: str,
+                            reverse: bool = False,
+                            presentAcqOrders: typing.Set[int] = None,
+                            includeDose: bool = False) -> None:
+        """ Generates an angle file in .tlt format in the specified location. If reverse is set to true the angles in
+        file are sorted in the opposite order. AreTomo3 also looks for the corresponding tilt angle file that has the
+        same file name except a different file extension. The extension of tilt angle files must be either .rawtlt or
+        _TLT.txt. Tilt series files and the associated tilt angle files must be in the same flat directory. In a tilt
+        angle file, column 1 in the angle file is mandatory, which contains the tilt angles in the same order as in
+        the tilt series. Column 2 is optional and the order of the acquisition. Column 3 is the image dose in
+        electrons / squared angstroms.
+
+        :param tltFilePath: String containing the path where the file is created.
+        :param reverse: Boolean indicating if the angle list must be reversed.
+        :param presentAcqOrders: set containing the present acq orders in both the given TS and CTFTomoSeries. Used to
+        filter the tilt angles that will be written in the tlt file generated. The parameter excludedViews is ignored
+        if presentAcqOrders is provided, as the excluded views info may have been used to generate the presentAcqOrders
+        (see tomo > utils > getCommonTsAndCtfElements)
+        :param includeDose: boolean used to indicate if the tlt file created must contain an additional column with
+        the dose or not (default).
+        """
+        angleList = []
+        acqOrderList = []
+        doseList = []
+        if presentAcqOrders:
+            for ti in ts.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD):
+                acqOrder = ti.getAcquisitionOrder()
+                if acqOrder in presentAcqOrders:
+                    angleList.append(ti.getTiltAngle())
+                    acqOrderList.append(acqOrder)
+                    if includeDose:
+                        doseList.append(ti.getAcquisition().getAccumDose())
+        else:
+            for ti in ts.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD):
+                angleList.append(ti.getTiltAngle())
+                acqOrderList.append(ti.getAcquisitionOrder())
+                if includeDose:
+                    doseList.append(ti.getAcquisition().getAccumDose())
+
+        if reverse:
+            angleList.reverse()
+            acqOrderList.reverse()
+            if includeDose:
+                doseList.reverse()
+
+        with open(tltFilePath, 'w') as f:
+            if includeDose:
+                f.writelines(f"{angle:0.3f}\t{acqOrder}\t{dose:0.4f}\n" for angle, acqOrder, dose in
+                             zip(angleList, acqOrderList, doseList))
+            else:
+                f.writelines(f"{angle:0.3f}\t{acqOrder} \n" for angle, acqOrder in zip(angleList, acqOrderList))
