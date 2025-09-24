@@ -483,7 +483,7 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self._store(self.badTsAliMsg)
                         return
 
-                if doTomoRec and not doAliTs:
+                if doTomoRec:
                     # Check the tomogram dims before storing the corresponding outputs
                     tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, suffix='_Vol', ext=MRC_EXT)
                     tomoDims = self._getOutputDim(tomoFileName)
@@ -774,9 +774,6 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         # Local alignment management
         if self.doLocalAli.get():
             args['-AtPatch'] = f"{self.patchX} {self.patchY}"
-
-        # TODO: check param OutXF
-        # TODO: check param IntpCor
 
         param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
         param += ' ' + self.extraParams.get()
