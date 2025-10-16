@@ -492,7 +492,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
                     #
                     # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                    inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
+                    inTiltAngles = np.array(sorted([ti.getTiltAngle() for ti in ts]))
                     aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
                     if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
                         msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
