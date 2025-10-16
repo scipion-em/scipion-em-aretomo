@@ -29,10 +29,12 @@
 # **************************************************************************
 import logging
 import os
+import traceback
+
 import numpy as np
 import time
-from typing import List, Literal, Tuple, Union, Optional
-from pwem import ALIGN_NONE, ALIGN_2D
+from typing import List, Tuple, Union, Optional
+from pwem import ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
 from pyworkflow.object import Set, String, Pointer
@@ -41,7 +43,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, removeBaseExt, getExt, createLink, redStr
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -405,6 +407,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except Exception as e:
             self.failedItems.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
 
     def runAreTomoStep(self, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
@@ -434,6 +437,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self.failedItems.append(tsId)
                 logger.error(redStr(f'tsId = {tsId} -> AreTomo execution failed '
                                     f'with the exception -> {e}'))
+                logger.error(traceback.format_exc())
 
     def createOutputStep(self, tsId: str, tsFn: str):
         if tsId in self.failedItems:
@@ -630,6 +634,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self._store(outputCtfs)
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def createOutputFailedTs(self, tsId: str):
         logger.info(cyanStr(f'Failed TS ---> {tsId}'))
@@ -651,6 +656,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the failed output with '
                                 f'exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
