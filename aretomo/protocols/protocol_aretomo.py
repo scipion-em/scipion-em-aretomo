@@ -34,7 +34,9 @@ import traceback
 import numpy as np
 import time
 from typing import List, Tuple, Union, Optional
+
 from pwem import ALIGN_2D
+from pwem.convert.headers import fixVolume
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
 from pyworkflow.object import Set, String, Pointer
@@ -43,7 +45,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, replaceExt, moveFile
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -745,14 +747,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         recTomo= True
         estimateCtf = False
         if even is None:
-            outFile = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRCS_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
             align = 0 if self.skipAlign else 1
             recTomo = self.makeTomo
             estimateCtf = self.doEstimateCtf.get()
         elif even:
-            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRCS_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)
         else:
-            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRCS_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT)
 
         args = {
             '-InMrc': tsFn,
