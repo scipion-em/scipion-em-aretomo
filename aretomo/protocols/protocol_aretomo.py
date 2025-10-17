@@ -62,6 +62,7 @@ FAILED_TS = 'FailedTiltSeries'
 EVEN = '_even'
 ODD = '_odd'
 MRC_EXT = '.mrc'
+MRCS_EXT = '.mrcs'
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
@@ -385,8 +386,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     writeAlnFile(ts, tsFn, alnFile)
             else:
                 if self.doEvenOdd.get():
-                    outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-                    outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                    outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                    outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
                     ts.applyTransformToAll(outputTsFileName,
                                            outFileNamesEvenOdd=[outputTsFnEven, outputTsFnOdd])
                 else:
@@ -422,8 +423,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self.runJob(program, param, env=Plugin.getEnviron())
                 if self.doEvenOdd.get():
                     tmpPrefix = self._getTmpPath(tsId)
-                    inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-                    inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                    inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                    inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
                     # Odd
                     logger.info(cyanStr(f'tsOd = {tsId} ------- running Aretomo [ODD Tilt-series]...'))
                     param = self._genAretomoCmd(ts, inTsFnOdd, tsId, even=False)
