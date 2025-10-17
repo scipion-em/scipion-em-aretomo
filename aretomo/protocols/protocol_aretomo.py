@@ -377,7 +377,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             extraPrefix = self._getExtraPath(tsId)
             tmpPrefix = self._getTmpPath(tsId)
             pwutils.makePath(*[tmpPrefix, extraPrefix])
-            outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+            outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
     
             if self.skipAlign:
                 if self.makeTomo:
@@ -418,7 +418,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 ts = self.getTsFromTsId(tsId)
                 program = Plugin.getProgram()
                 tmpPrefix = self._getTmpPath(tsId)
-                inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
                 param = self._genAretomoCmd(ts, inTsFn, tsId)
                 self.runJob(program, param, env=Plugin.getEnviron())
                 if self.doEvenOdd.get():
@@ -745,14 +745,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         recTomo= True
         estimateCtf = False
         if even is None:
-            outFile = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRCS_EXT)
             align = 0 if self.skipAlign else 1
             recTomo = self.makeTomo
             estimateCtf = self.doEstimateCtf.get()
         elif even:
-            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRCS_EXT)
         else:
-            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT)
+            outFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRCS_EXT)
 
         args = {
             '-InMrc': tsFn,
