@@ -36,7 +36,6 @@ import time
 from typing import List, Tuple, Union, Optional
 
 from pwem import ALIGN_2D
-from pwem.convert.headers import fixVolume
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
 from pyworkflow.object import Set, String, Pointer
@@ -45,7 +44,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, replaceExt, moveFile
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
