@@ -30,6 +30,7 @@
 import logging
 import os
 import traceback
+from collections import Counter
 
 import numpy as np
 import time
@@ -338,7 +339,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         while True:
             listTSInput = inTsSet.getTSIds()
-            if not inTsSet.isStreamOpen() and self.TS_read == listTSInput:
+            # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
+            # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
+            # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
+            if not inTsSet.isStreamOpen() and Counter(self.TS_read) == Counter(listTSInput):
                 logger.info(cyanStr('Input set closed, all items processed\n'))
                 self._insertFunctionStep(self.closeOutputSetStep,
                                          outputsToCheck,
@@ -470,42 +474,42 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
                 alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
 
-                if not (self.makeTomo and self.skipAlign):
-                    # We found the following behavior to be happening sometimes (non-systematically):
-                    # It can be observed that the tilt angles are badly set for the non-excluded views:
-                    #
-                    # AreTomo Alignment / Priims bprmMn
-                    # RawSize = 512 512 61
-                    # NumPatches = 0
-                    # DarkFrame =     0    0   -55.00
-                    # DarkFrame =     1    1   -53.00
-                    # DarkFrame =     2    2   -51.00
-                    # DarkFrame =     3    3   -49.00
-                    # DarkFrame =     4    4   -47.00
-                    # DarkFrame =     5    5   -45.00
-                    # DarkFrame =     6    6   -43.00
-                    # DarkFrame =    58   58    61.00
-                    # DarkFrame =    59   59    63.00
-                    # DarkFrame =    60   60    65.00
-                    # SEC     ROT         GMAG       TX          TY      SMEAN     SFIT    SCALE     BASE     TILT
-                    #     7   -10.6414    1.00000     30.409     -7.146     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     8   -10.6414    1.00000     25.102     -4.066     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     9   -10.6414    1.00000     28.247     -7.649     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #
-                    # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                    if ts.hasExcludedViews():
-                        inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
-                    else:
-                        inTiltAngles = np.array(sorted([ti.getTiltAngle() for ti in ts]))
-                    aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
-                    if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
-                        msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
-                        self.warning(msg + ' Skipping...')
-                        outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
-                        self.badTsAliMsg.set(outMsg)
-                        self._store(self.badTsAliMsg)
-                        return
+                # if not (self.makeTomo and self.skipAlign):
+                #     # We found the following behavior to be happening sometimes (non-systematically):
+                #     # It can be observed that the tilt angles are badly set for the non-excluded views:
+                #     #
+                #     # AreTomo Alignment / Priims bprmMn
+                #     # RawSize = 512 512 61
+                #     # NumPatches = 0
+                #     # DarkFrame =     0    0   -55.00
+                #     # DarkFrame =     1    1   -53.00
+                #     # DarkFrame =     2    2   -51.00
+                #     # DarkFrame =     3    3   -49.00
+                #     # DarkFrame =     4    4   -47.00
+                #     # DarkFrame =     5    5   -45.00
+                #     # DarkFrame =     6    6   -43.00
+                #     # DarkFrame =    58   58    61.00
+                #     # DarkFrame =    59   59    63.00
+                #     # DarkFrame =    60   60    65.00
+                #     # SEC     ROT         GMAG       TX          TY      SMEAN     SFIT    SCALE     BASE     TILT
+                #     #     7   -10.6414    1.00000     30.409     -7.146     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+                #     #     8   -10.6414    1.00000     25.102     -4.066     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+                #     #     9   -10.6414    1.00000     28.247     -7.649     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+                #     #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
+                #     #
+                #     # Hence, the output tilt angles will be checked before storing the corresponding outputs
+                #     if ts.hasExcludedViews():
+                #         inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
+                #     else:
+                #         inTiltAngles = np.array(sorted([ti.getTiltAngle() for ti in ts]))
+                #     aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
+                #     if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
+                #         msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
+                #         self.warning(msg + ' Skipping...')
+                #         outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
+                #         self.badTsAliMsg.set(outMsg)
+                #         self._store(self.badTsAliMsg)
+                #         return
 
                 if self.makeTomo:
                     # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
