@@ -29,10 +29,14 @@
 # **************************************************************************
 import logging
 import os
+import traceback
+from collections import Counter
+
 import numpy as np
 import time
-from typing import List, Literal, Tuple, Union, Optional
-from pwem import ALIGN_NONE, ALIGN_2D
+from typing import List, Tuple, Union, Optional
+
+from pwem import ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
 from pyworkflow.object import Set, String, Pointer
@@ -41,7 +45,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, removeBaseExt, getExt, createLink, redStr
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -60,6 +64,7 @@ FAILED_TS = 'FailedTiltSeries'
 EVEN = '_even'
 ODD = '_odd'
 MRC_EXT = '.mrc'
+MRCS_EXT = '.mrcs'
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
@@ -334,7 +339,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
         while True:
             listTSInput = inTsSet.getTSIds()
-            if not inTsSet.isStreamOpen() and self.TS_read == listTSInput:
+            # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
+            # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
+            # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
+            if not inTsSet.isStreamOpen() and Counter(self.TS_read) == Counter(listTSInput):
                 logger.info(cyanStr('Input set closed, all items processed\n'))
                 self._insertFunctionStep(self.closeOutputSetStep,
                                          outputsToCheck,
@@ -374,7 +382,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             extraPrefix = self._getExtraPath(tsId)
             tmpPrefix = self._getTmpPath(tsId)
             pwutils.makePath(*[tmpPrefix, extraPrefix])
-            outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+            outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
     
             if self.skipAlign:
                 if self.makeTomo:
@@ -383,8 +391,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     writeAlnFile(ts, tsFn, alnFile)
             else:
                 if self.doEvenOdd.get():
-                    outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-                    outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                    outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                    outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
                     ts.applyTransformToAll(outputTsFileName,
                                            outFileNamesEvenOdd=[outputTsFnEven, outputTsFnOdd])
                 else:
@@ -405,6 +413,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except Exception as e:
             self.failedItems.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
 
     def runAreTomoStep(self, tsId: str, tsFn: str):
         """ Call AreTomo with the appropriate parameters. """
@@ -414,13 +423,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 ts = self.getTsFromTsId(tsId)
                 program = Plugin.getProgram()
                 tmpPrefix = self._getTmpPath(tsId)
-                inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
                 param = self._genAretomoCmd(ts, inTsFn, tsId)
                 self.runJob(program, param, env=Plugin.getEnviron())
                 if self.doEvenOdd.get():
                     tmpPrefix = self._getTmpPath(tsId)
-                    inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
-                    inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
+                    inTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                    inTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
                     # Odd
                     logger.info(cyanStr(f'tsOd = {tsId} ------- running Aretomo [ODD Tilt-series]...'))
                     param = self._genAretomoCmd(ts, inTsFnOdd, tsId, even=False)
@@ -434,6 +443,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 self.failedItems.append(tsId)
                 logger.error(redStr(f'tsId = {tsId} -> AreTomo execution failed '
                                     f'with the exception -> {e}'))
+                logger.error(traceback.format_exc())
 
     def createOutputStep(self, tsId: str, tsFn: str):
         if tsId in self.failedItems:
@@ -463,40 +473,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
 
                 finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
                 alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
-
-                if not (self.makeTomo and self.skipAlign):
-                    # We found the following behavior to be happening sometimes (non-systematically):
-                    # It can be observed that the tilt angles are badly set for the non-excluded views:
-                    #
-                    # AreTomo Alignment / Priims bprmMn
-                    # RawSize = 512 512 61
-                    # NumPatches = 0
-                    # DarkFrame =     0    0   -55.00
-                    # DarkFrame =     1    1   -53.00
-                    # DarkFrame =     2    2   -51.00
-                    # DarkFrame =     3    3   -49.00
-                    # DarkFrame =     4    4   -47.00
-                    # DarkFrame =     5    5   -45.00
-                    # DarkFrame =     6    6   -43.00
-                    # DarkFrame =    58   58    61.00
-                    # DarkFrame =    59   59    63.00
-                    # DarkFrame =    60   60    65.00
-                    # SEC     ROT         GMAG       TX          TY      SMEAN     SFIT    SCALE     BASE     TILT
-                    #     7   -10.6414    1.00000     30.409     -7.146     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     8   -10.6414    1.00000     25.102     -4.066     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #     9   -10.6414    1.00000     28.247     -7.649     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #    10   -10.6414    1.00000     24.338     -5.868     1.00     1.00     1.00     0.00  1567301525373690323140608.00
-                    #
-                    # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                    inTiltAngles = np.array([ti.getTiltAngle() for ti in ts if ti.getIndex() - 1 in AretomoAln.sections])
-                    aretomoTiltAngles = np.array([AretomoAln.tilt_angles])
-                    if not np.allclose(inTiltAngles, aretomoTiltAngles, atol=45):
-                        msg = 'tsId = %s. Bad tilt angle values detected.' % tsId
-                        self.warning(msg + ' Skipping...')
-                        outMsg = self.badTsAliMsg.get() + '\n' + msg if self.badTsAliMsg.get() else '\n' + msg
-                        self.badTsAliMsg.set(outMsg)
-                        self._store(self.badTsAliMsg)
-                        return
 
                 if self.makeTomo:
                     # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
@@ -630,6 +606,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self._store(outputCtfs)
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def createOutputFailedTs(self, tsId: str):
         logger.info(cyanStr(f'Failed TS ---> {tsId}'))
@@ -651,6 +628,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the failed output with '
                                 f'exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()

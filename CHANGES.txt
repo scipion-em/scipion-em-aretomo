@@ -4,6 +4,8 @@
   - Adapted to the updated TiltSeries model from scipion-em-tomo 3.10.1.
   - Streaming reviewed and made more robust.
   - Interpolated tilt-series checking removed from the tests.
+  - Fix streaming condition to insert the closing step. Now it uses collections.Counter when comparing
+    the tsId lists instead of direct comparison, which is order-sensitive.
 3.10.3:
  Users:
   - Fix the even/odd functionality.
