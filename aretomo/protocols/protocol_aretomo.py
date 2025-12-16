@@ -335,7 +335,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         outputsToCheck = self._getOutputsToCheck()
 
         while True:
-            listTSInput = inTsSet.getTSIds()
+            with self._lock:
+                listTSInput = inTsSet.getTSIds()
             # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
             # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
             # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
