@@ -338,7 +338,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         outputsToCheck = self._getOutputsToCheck()
 
         while True:
-            listTSInput = inTsSet.getTSIds()
+            with self._lock:
+                listTSInput = inTsSet.getTSIds()
+                tsToProcessDict = {ts.getTsId(): ts.clone() for ts in inTsSet.iterItems()
+                                   if ts.getTsId() not in self.TS_read  # Only not processed tsIds
+                                   and ts.getSize() > 0}  # Avoid processing empty TS
+
             # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
             # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
             # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
@@ -349,19 +354,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                          prerequisites=closeSetStepDeps,
                                          needsGPU=False)
                 break
-            for ts in inTsSet.iterItems():
-                if ts.getTsId() not in self.TS_read and ts.getSize() > 0:  # Avoid processing empty TS (before the Tis are added)
-                    tsId = ts.getTsId()
-                    with self._lock:
-                        fName = ts.getFirstItem().getFileName()
-                    args = (tsId, fName)
-                    convertInput = self._insertFunctionStep(self.convertInputStep, *args,
+
+            for tsId, ts in tsToProcessDict.items():
+                    convertInput = self._insertFunctionStep(self.convertInputStep, ts,
                                                             prerequisites=[],
                                                             needsGPU=False)
-                    runAreTomo = self._insertFunctionStep(self.runAreTomoStep, *args,
+                    runAreTomo = self._insertFunctionStep(self.runAreTomoStep, ts,
                                                           prerequisites=[convertInput],
                                                           needsGPU=True)
-                    createOutputS = self._insertFunctionStep(self.createOutputStep, *args,
+                    createOutputS = self._insertFunctionStep(self.createOutputStep, ts,
                                                              prerequisites=[runAreTomo],
                                                              needsGPU=False)
                     closeSetStepDeps.append(createOutputS)
@@ -374,11 +375,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     inTsSet.loadAllProperties() # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
-    def convertInputStep(self, tsId: str, tsFn: str):
+    def convertInputStep(self, ts: TiltSeries):
+        tsId = ts.getTsId()
         try:
             logger.info(cyanStr(f'tsId = {tsId} ------- converting the inputs...'))
-            ts = self.getTsFromTsId(tsId)
-    
+            with self._lock:
+                firstItem = ts.getFirstEnabledItem()
+                presentAcqOrders = ts.getTsPresentAcqOrders()
+
+            tsFn = firstItem.getFileName()
             extraPrefix = self._getExtraPath(tsId)
             tmpPrefix = self._getTmpPath(tsId)
             pwutils.makePath(*[tmpPrefix, extraPrefix])
@@ -399,7 +404,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                     ts.applyTransform(outputTsFileName)
     
                 # Generate angle file
-                presentAcqOrders = ts.getTsPresentAcqOrders()
                 angleFilePath = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".tlt")
                 ts.generateTltFile(angleFilePath,
                                    presentAcqOrders=presentAcqOrders,
@@ -415,12 +419,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
             logger.error(traceback.format_exc())
 
-    def runAreTomoStep(self, tsId: str, tsFn: str):
+    def runAreTomoStep(self, ts: TiltSeries):
         """ Call AreTomo with the appropriate parameters. """
+        tsId = ts.getTsId()
         if tsId not in self.failedItems:
             logger.info(cyanStr(f'tsId ={tsId}------- running AreTomo...'))
             try:
-                ts = self.getTsFromTsId(tsId)
+                with self._lock:
+                    firstItem = ts.getFirstEnabledItem()
+                tsFn = firstItem.getFileName()
                 program = Plugin.getProgram()
                 tmpPrefix = self._getTmpPath(tsId)
                 inTsFn = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
@@ -445,23 +452,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                                     f'with the exception -> {e}'))
                 logger.error(traceback.format_exc())
 
-    def createOutputStep(self, tsId: str, tsFn: str):
+    def createOutputStep(self, ts: TiltSeries):
+        tsId = ts.getTsId()
         if tsId in self.failedItems:
-            self.createOutputFailedTs(tsId)
+            self.createOutputFailedTs(ts)
         else:
-            self.createOutputTs(tsId, tsFn)
+            self.createOutputTs(ts)
             # Close explicitly the outputs (for streaming)
             for outputName in self._possibleOutputs.keys():
                 output = getattr(self, outputName, None)
                 if output:
                     output.close()
 
-    def createOutputTs(self, tsId: str, tsFn: str):
+    def createOutputTs(self, ts: TiltSeries):
         try:
+            tsId = ts.getTsId()
+            logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
             with self._lock:
-                logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
-
-                ts = self.getTsFromTsId(tsId, doLock=False)
+                firstItem = ts.getFirstEnabledItem()
+                tsFn = firstItem.getFileName()
                 extraPrefix = self._getExtraPath(tsId)
                 AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
                 indexDict = self._getIndexAssignDict(ts)
@@ -605,14 +614,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         outputCtfs.write()
                         self._store(outputCtfs)
         except Exception as e:
-            logger.error(redStr(f'tsId = {tsId} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
+                                f'exception {e}. Skipping... '))
             logger.error(traceback.format_exc())
 
-    def createOutputFailedTs(self, tsId: str):
+    def createOutputFailedTs(self, ts: TiltSeries):
+        tsId = ts.getTsId()
         logger.info(cyanStr(f'Failed TS ---> {tsId}'))
         try:
             with self._lock:
-                ts = self.getTsFromTsId(tsId, doLock=False)
                 inTsSet = self._getSetOfTiltSeries()
                 outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
                 newTs = TiltSeries()
