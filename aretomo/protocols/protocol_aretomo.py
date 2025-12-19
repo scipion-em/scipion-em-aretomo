@@ -379,9 +379,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         tsId = ts.getTsId()
         try:
             logger.info(cyanStr(f'tsId = {tsId} ------- converting the inputs...'))
-            with self._lock:
-                firstItem = ts.getFirstEnabledItem()
-                presentAcqOrders = ts.getTsPresentAcqOrders()
+            firstItem = ts.getFirstEnabledItem()
+            presentAcqOrders = ts.getTsPresentAcqOrders()
 
             tsFn = firstItem.getFileName()
             extraPrefix = self._getExtraPath(tsId)
@@ -425,8 +424,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if tsId not in self.failedItems:
             logger.info(cyanStr(f'tsId ={tsId}------- running AreTomo...'))
             try:
-                with self._lock:
-                    firstItem = ts.getFirstEnabledItem()
+                firstItem = ts.getFirstEnabledItem()
                 tsFn = firstItem.getFileName()
                 program = Plugin.getProgram()
                 tmpPrefix = self._getTmpPath(tsId)
@@ -468,21 +466,20 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         try:
             tsId = ts.getTsId()
             logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
+            firstItem = ts.getFirstEnabledItem()
+            tsFn = firstItem.getFileName()
+            extraPrefix = self._getExtraPath(tsId)
+            AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
+            indexDict = self._getIndexAssignDict(ts)
+            finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
+            for newInd, origInd in indexDict.items():
+                secNum = newInd - 1  # Indices begin in 1, sects in 0
+                if secNum in AretomoAln.sections:
+                    finalIndsAliDict[origInd] = AretomoAln.sections.index(secNum)
+
+            finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
+            alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
             with self._lock:
-                firstItem = ts.getFirstEnabledItem()
-                tsFn = firstItem.getFileName()
-                extraPrefix = self._getExtraPath(tsId)
-                AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
-                indexDict = self._getIndexAssignDict(ts)
-                finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
-                for newInd, origInd in indexDict.items():
-                    secNum = newInd - 1  # Indices begin in 1, sects in 0
-                    if secNum in AretomoAln.sections:
-                        finalIndsAliDict[origInd] = AretomoAln.sections.index(secNum)
-
-                finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
-                alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
-
                 if self.makeTomo:
                     # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
                     # related to graphic cards with a compute capability greater than 8.6. The behavior observed is detailed
