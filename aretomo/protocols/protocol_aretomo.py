@@ -29,6 +29,7 @@
 # **************************************************************************
 import logging
 import os
+import sqlite3
 import traceback
 from collections import Counter
 
@@ -46,6 +47,7 @@ from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
+from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -462,6 +464,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if output:
                     output.close()
 
+    @retry_on_sqlite_lock(log=logger)
     def createOutputTs(self, ts: TiltSeries):
         try:
             tsId = ts.getTsId()
@@ -610,6 +613,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         outputCtfs.update(newCTFTomoSeries)
                         outputCtfs.write()
                         self._store(outputCtfs)
+
+        except sqlite3.OperationalError:
+            # Let the decorator retry
+            raise
+
         except Exception as e:
             logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
                                 f'exception {e}. Skipping... '))
