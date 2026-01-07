@@ -29,13 +29,12 @@
 # **************************************************************************
 import logging
 import os
-import sqlite3
 import traceback
 from collections import Counter
 
 import numpy as np
 import time
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Type
 
 from pwem import ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
@@ -53,7 +52,7 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 
 from .. import Plugin
-from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile
+from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
 from ..convert.dataimport import AretomoCtfParser
 from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
 
@@ -464,15 +463,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if output:
                     output.close()
 
-    @retry_on_sqlite_lock(log=logger)
     def createOutputTs(self, ts: TiltSeries):
         try:
             tsId = ts.getTsId()
             logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
             firstItem = ts.getFirstEnabledItem()
             tsFn = firstItem.getFileName()
-            extraPrefix = self._getExtraPath(tsId)
-            AretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
+            aretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
             indexDict = self._getIndexAssignDict(ts)
             finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
             for newInd, origInd in indexDict.items():
@@ -480,148 +477,149 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 if secNum in AretomoAln.sections:
                     finalIndsAliDict[origInd] = AretomoAln.sections.index(secNum)
 
-            finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
-            alignmentMatrix = getTransformationMatrix(AretomoAln.imod_matrix)
-            with self._lock:
-                if self.makeTomo:
-                    # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
-                    # related to graphic cards with a compute capability greater than 8.6. The behavior observed is detailed
-                    # below:
-                    #
-                    # The non-systematic behavior reported is based on the fact that the dimensions of the tomograms
-                    # reconstructed (bin 4) are:
-                    #
-                    # Sometimes both are well --> dimensions: 958 x 926 x 300
-                    # Sometimes both are wrong --> dimensions: 958 x no.TiltImages x 926
-                    # Sometimes one is well and the other wrong, changing the one which is well and the one which is wrong
-                    # across multiple executions.
-                    #
-                    # Until it's clarified, we'll check the dimensions of the generated tomogram and avoid storing the
-                    # corresponding results if it was badly generated (consequence of a bad alignment with weird tilt angle
-                    # values, see comment above).
-                    #
-                    # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                    tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
-                    tomoDims = self._getOutputDim(tomoFileName)
-                    if np.any(np.array(tomoDims) == len(ts)):
-                        msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
-                        self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
-                        outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
-                        self.badTomoRecMsg.set(outMsg)
-                        self._store(self.badTomoRecMsg)
-                        return
-                    outputSetOfTomograms = self.getOutputSetOfTomograms()
-                    # Tomogram attributes
-                    newTomogram = Tomogram()
-                    newTomogram.setLocation(tomoFileName)
-                    newTomogram.setSamplingRate(outputSetOfTomograms.getSamplingRate())
-                    newTomogram.setOrigin()
-                    newTomogram.setAcquisition(ts.getAcquisition())
-                    newTomogram.setTsId(tsId)
-                    newTomogram.setCtfCorrected(ts.ctfCorrected())
-                    if self.doEvenOdd.get():
-                        newTomogram.setHalfMaps([self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT),
-                                                 self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)])
-                    outputSetOfTomograms.append(newTomogram)
-                    outputSetOfTomograms.update(newTomogram)
-                    outputSetOfTomograms.write()
-                    self._store(outputSetOfTomograms)
-                else:
-                    # remove aligned stack from output
-                    pwutils.cleanPath(self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT))
-
-                # Save original TS stack with new alignment,
-                # unless making a tomo from pre-aligned TS
-                if not (self.makeTomo and self.skipAlign):
-                    outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
-                    newTs = TiltSeries()
-                    newTs.copyInfo(ts)
-                    newTs.setSamplingRate(self._getInputSampling())
-                    newTs.setAlignment2D()
-                    outputSetOfTiltSeries.append(newTs)
-
-                    for i, tiltImage in enumerate(ts.iterItems(orderBy=TiltImage.INDEX_FIELD)):
-                        newTi = tiltImage.clone()
-                        newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
-                        transform = Transform()
-                        ind = i + 1
-
-                        if ind in finalInds:
-                            # Set the tilt angles
-                            secIndex = finalIndsAliDict[ind]
-                            acq = tiltImage.getAcquisition()
-                            newTi.setTiltAngle(AretomoAln.tilt_angles[secIndex])
-                            acq.setTiltAxisAngle(AretomoAln.tilt_axes[secIndex])
-                            newTi.setAcquisition(acq)
-
-                            # set Transform
-                            m = alignmentMatrix[:, :, secIndex]
-                            self.debug(
-                                f"Section {secNum}: {AretomoAln.tilt_axes[secIndex]}, "
-                                f"{AretomoAln.tilt_angles[secIndex]}")
-                            transform.setMatrix(m)
-                        else:
-                            newTi.setEnabled(False)
-                            transform.setMatrix(np.identity(3))
-
-                        newTi.setTransform(transform)
-                        newTi.setSamplingRate(self._getInputSampling())
-                        newTs.append(newTi)
-
-                    # update tilt axis angle for TS with the first value only
-                    acq = newTs.getAcquisition()
-                    acq.setTiltAxisAngle(AretomoAln.tilt_axes[0])
-                    newTs.setAcquisition(acq)
-
-                    newTs.setDim(self._getSetOfTiltSeries().getDim())
-                    newTs.write(properties=False)
-
-                    outputSetOfTiltSeries.update(newTs)
-                    outputSetOfTiltSeries.write()
-                    self._store(outputSetOfTiltSeries)
-
-                    # Output set of CTF tomo series
-                    if self.doEstimateCtf:
-                        outputCtfs = self.getOutputSetOfCtfs()
-
-                        newCTFTomoSeries = CTFTomoSeries()
-                        newCTFTomoSeries.copyInfo(newTs)
-                        newCTFTomoSeries.setTiltSeries(newTs)
-                        newCTFTomoSeries.setTsId(tsId)
-                        outputCtfs.append(newCTFTomoSeries)
-
-                        aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix="ctf", ext=".txt")
-                        psdFile = pwutils.replaceExt(aretomoCtfFile, 'mrc')
-                        psdFile = psdFile if os.path.exists(psdFile) else None
-                        ctfResult = AretomoCtfParser.readAretomoCtfOutput(aretomoCtfFile)
-
-                        for i, tiltImage in enumerate(ts.iterItems()):
-                            ctf = CTFModel()
-                            ind = i + 1
-                            if ind in finalInds:
-                                secIndex = finalIndsAliDict[ind]
-                                AretomoCtfParser._getCtfTi(ctf, ctfResult, item=secIndex, psdFile=psdFile)
-                                newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
-                            else:
-                                ctf.setWrongDefocus()
-                                newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
-                                newCtfTomo.setEnabled(False)
-
-                            newCtfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
-                            newCTFTomoSeries.append(newCtfTomo)
-
-                        outputCtfs.update(newCTFTomoSeries)
-                        outputCtfs.write()
-                        self._store(outputCtfs)
-
-        except sqlite3.OperationalError:
-            # Let the decorator retry
-            raise
+            self._registerOutput(ts, aretomoAln, finalIndsAliDict)
 
         except Exception as e:
             logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
                                 f'exception {e}. Skipping... '))
             logger.error(traceback.format_exc())
+
+    @retry_on_sqlite_lock(log=logger)
+    def _registerOutput(self, ts: TiltSeries, aretomoAln: Type[AretomoAln], finalIndsAliDict: dict):
+        tsId = ts.getTsId()
+        firstItem = ts.getFirstEnabledItem()
+        tsFn = firstItem.getFileName()
+        extraPrefix = self._getExtraPath(tsId)
+        alignmentMatrix = getTransformationMatrix(aretomoAln.imod_matrix)
+        finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
+        with self._lock:
+            if self.makeTomo:
+                # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
+                # related to graphic cards with a compute capability greater than 8.6. The behavior observed is detailed
+                # below:
+                #
+                # The non-systematic behavior reported is based on the fact that the dimensions of the tomograms
+                # reconstructed (bin 4) are:
+                #
+                # Sometimes both are well --> dimensions: 958 x 926 x 300
+                # Sometimes both are wrong --> dimensions: 958 x no.TiltImages x 926
+                # Sometimes one is well and the other wrong, changing the one which is well and the one which is wrong
+                # across multiple executions.
+                #
+                # Until it's clarified, we'll check the dimensions of the generated tomogram and avoid storing the
+                # corresponding results if it was badly generated (consequence of a bad alignment with weird tilt angle
+                # values, see comment above).
+                #
+                # Hence, the output tilt angles will be checked before storing the corresponding outputs
+                tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
+                tomoDims = self._getOutputDim(tomoFileName)
+                if np.any(np.array(tomoDims) == len(ts)):
+                    msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
+                    self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
+                    outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
+                    self.badTomoRecMsg.set(outMsg)
+                    self._store(self.badTomoRecMsg)
+                    return
+                outputSetOfTomograms = self.getOutputSetOfTomograms()
+                # Tomogram attributes
+                newTomogram = Tomogram()
+                newTomogram.setLocation(tomoFileName)
+                newTomogram.setSamplingRate(outputSetOfTomograms.getSamplingRate())
+                newTomogram.setOrigin()
+                newTomogram.setAcquisition(ts.getAcquisition())
+                newTomogram.setTsId(tsId)
+                newTomogram.setCtfCorrected(ts.ctfCorrected())
+                if self.doEvenOdd.get():
+                    newTomogram.setHalfMaps([self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT),
+                                             self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)])
+                outputSetOfTomograms.append(newTomogram)
+                outputSetOfTomograms.update(newTomogram)
+                outputSetOfTomograms.write()
+                self._store(outputSetOfTomograms)
+            else:
+                # remove aligned stack from output
+                pwutils.cleanPath(self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT))
+
+            # Save original TS stack with new alignment,
+            # unless making a tomo from pre-aligned TS
+            if not (self.makeTomo and self.skipAlign):
+                outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
+                newTs = TiltSeries()
+                newTs.copyInfo(ts)
+                newTs.setSamplingRate(self._getInputSampling())
+                newTs.setAlignment2D()
+                outputSetOfTiltSeries.append(newTs)
+
+                for i, tiltImage in enumerate(ts.iterItems(orderBy=TiltImage.INDEX_FIELD)):
+                    newTi = tiltImage.clone()
+                    newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
+                    transform = Transform()
+                    ind = i + 1
+
+                    if ind in finalInds:
+                        # Set the tilt angles
+                        secIndex = finalIndsAliDict[ind]
+                        acq = tiltImage.getAcquisition()
+                        newTi.setTiltAngle(aretomoAln.tilt_angles[secIndex])
+                        acq.setTiltAxisAngle(aretomoAln.tilt_axes[secIndex])
+                        newTi.setAcquisition(acq)
+
+                        # set Transform
+                        m = alignmentMatrix[:, :, secIndex]
+                        transform.setMatrix(m)
+                    else:
+                        newTi.setEnabled(False)
+                        transform.setMatrix(np.identity(3))
+
+                    newTi.setTransform(transform)
+                    newTi.setSamplingRate(self._getInputSampling())
+                    newTs.append(newTi)
+
+                # update tilt axis angle for TS with the first value only
+                acq = newTs.getAcquisition()
+                acq.setTiltAxisAngle(aretomoAln.tilt_axes[0])
+                newTs.setAcquisition(acq)
+
+                newTs.setDim(self._getSetOfTiltSeries().getDim())
+                newTs.write(properties=False)
+
+                outputSetOfTiltSeries.update(newTs)
+                outputSetOfTiltSeries.write()
+                self._store(outputSetOfTiltSeries)
+
+                # Output set of CTF tomo series
+                if self.doEstimateCtf:
+                    outputCtfs = self.getOutputSetOfCtfs()
+
+                    newCTFTomoSeries = CTFTomoSeries()
+                    newCTFTomoSeries.copyInfo(newTs)
+                    newCTFTomoSeries.setTiltSeries(newTs)
+                    newCTFTomoSeries.setTsId(tsId)
+                    outputCtfs.append(newCTFTomoSeries)
+
+                    aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix="ctf", ext=".txt")
+                    psdFile = pwutils.replaceExt(aretomoCtfFile, 'mrc')
+                    psdFile = psdFile if os.path.exists(psdFile) else None
+                    ctfResult = AretomoCtfParser.readAretomoCtfOutput(aretomoCtfFile)
+
+                    for i, tiltImage in enumerate(ts.iterItems()):
+                        ctf = CTFModel()
+                        ind = i + 1
+                        if ind in finalInds:
+                            secIndex = finalIndsAliDict[ind]
+                            AretomoCtfParser._getCtfTi(ctf, ctfResult, item=secIndex, psdFile=psdFile)
+                            newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+                        else:
+                            ctf.setWrongDefocus()
+                            newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+                            newCtfTomo.setEnabled(False)
+
+                        newCtfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
+                        newCTFTomoSeries.append(newCtfTomo)
+
+                    outputCtfs.update(newCTFTomoSeries)
+                    outputCtfs.write()
+                    self._store(outputCtfs)
 
     def createOutputFailedTs(self, ts: TiltSeries):
         tsId = ts.getTsId()
