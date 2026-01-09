@@ -28,7 +28,7 @@ import os
 
 import pwem
 import pyworkflow.utils as pwutils
-from pyworkflow import VarTypes
+from pyworkflow import VarTypes, TOMO
 
 from .constants import *
 
@@ -43,6 +43,7 @@ class Plugin(pwem.Plugin):
     _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
     _supportedVersions = [V1_1_3]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
+    _processingField = [TOMO]
 
     @classmethod
     def _defineVariables(cls):
