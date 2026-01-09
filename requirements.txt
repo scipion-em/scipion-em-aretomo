@@ -1,4 +1,3 @@
-scipion-em>=3.5.0
-scipion-em-tomo>=3.10.1
-scipion-pyworkflow>=3.0.30
+scipion-pyworkflow @ git+https://github.com/scipion-em/scipion-pyworkflow.git@v3.11.3
+scipion-em-tomo @ git+https://github.com/scipion-em/scipion-em-tomo.git@v3.11.2
 numpy>=1.23.0
