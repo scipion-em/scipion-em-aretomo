@@ -62,7 +62,7 @@ class AretomoAln(NamedTuple):
     tilt_axes: List[float]
 
 
-def readAlnFile(alignFn: Union[str, os.PathLike]) -> Type[AretomoAln]:
+def readAlnFile(alignFn: Union[str, os.PathLike]) -> AretomoAln:
     """ Read AreTomo output alignment file (.aln):
     aln2xf conversion taken from https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py
     """

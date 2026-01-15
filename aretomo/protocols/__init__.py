@@ -25,3 +25,4 @@
 # **************************************************************************
 
 from .protocol_aretomo import ProtAreTomoAlignRecon
+from .protocol_import_alignment import ProtAreTomoImportAlignment
