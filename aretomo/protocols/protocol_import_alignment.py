@@ -163,7 +163,7 @@ class ProtAreTomoImportAlignment(EMProtocol):
         for tiltSeries in inputSetOfTiltSeries.iterItems():
             tsId = tiltSeries.getTsId()
             alnFilename = self._getAlignmentFile(tsId)
-            if not os.exists(alnFilename):
+            if not os.path.exists(alnFilename):
                 warnings.append(f'No alignment file for {alnFilename}')
     
         return warnings
