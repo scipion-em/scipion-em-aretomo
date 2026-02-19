@@ -1,3 +1,4 @@
+3.11.2: remove the dependency on ProtTomoBase and set the default no. threads to 3.
 3.11.1: deploy test.
 3.11.0:
  Users: interpolated tilt-series removed. The viewers manage from scipion-em-tomo 3.10.1 the interpolation.
