@@ -47,7 +47,6 @@ from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
-from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 
@@ -68,7 +67,7 @@ MRC_EXT = '.mrc'
 MRCS_EXT = '.mrcs'
 
 
-class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
+class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
     """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
     _label = 'tilt-series align and reconstruct'
     _devStatus = PROD
@@ -324,7 +323,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
                        label="Choose GPU IDs",
                        help="")
 
-        form.addParallelSection(threads=2, mpi=0)
+        form.addParallelSection(threads=3, mpi=0)
 
     # --------------------------- INSERT steps functions ----------------------
     def stepsGeneratorStep(self) -> None:
@@ -875,7 +874,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if outputSetOfTomograms:
             outputSetOfTomograms.enableAppend()
         else:
-            outputSetOfTomograms = self._createSetOfTomograms()
+            outputSetOfTomograms = SetOfTomograms.create(self._getPath(), template='tomograms%s.sqlite')
             outputSetOfTomograms.copyInfo(self._getSetOfTiltSeries())
             outputSetOfTomograms.setSamplingRate(self._getOutputSampling())
             outputSetOfTomograms.setStreamState(Set.STREAM_OPEN)
@@ -889,7 +888,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtTomoBase, ProtStreamingBase):
         if outputSetOfTiltSeries:
             outputSetOfTiltSeries.enableAppend()
         else:
-            outputSetOfTiltSeries = self._createSetOfTiltSeries()
+            outputSetOfTiltSeries = SetOfTiltSeries.create(self._getPath(), template='tiltseries')
             outputSetOfTiltSeries.copyInfo(self._getSetOfTiltSeries())
             pixSize = self._getInputSampling()
             alignment = ALIGN_2D
