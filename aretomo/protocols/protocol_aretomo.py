@@ -393,6 +393,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     createLink(tsFn, outputTsFileName)
                     alnFile = self.getAlnFile(tsFn, tsId)
                     writeAlnFile(ts, tsFn, alnFile)
+                    # Odd / even
+                    if self.doEvenOdd.get():
+                        inOddTsFn, inEvenTsFn = ts.getFirstItem().getOddEven()
+                        outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                        outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                        createLink(inOddTsFn, outputTsFnOdd)
+                        createLink(inEvenTsFn, outputTsFnEven)
             else:
                 if self.doEvenOdd.get():
                     outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
