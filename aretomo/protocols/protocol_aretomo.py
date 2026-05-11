@@ -68,7 +68,283 @@ MRCS_EXT = '.mrcs'
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
-    """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
+    """
+    Performs fiducial-free tilt-series alignment and tomographic reconstruction
+    in streaming mode using AreTomo. The protocol supports continuous ingestion
+    of tilt-series, optional alignment skipping, tomogram reconstruction,
+    CTF estimation, and odd/even half-map generation.
+
+    AI Generated:
+
+    Tilt-Series Align and Reconstruct (ProtAreTomoAlignRecon) — User Manual
+        Overview
+
+        The ProtAreTomoAlignRecon protocol processes cryo-electron tomography
+        tilt-series using the AreTomo package in a streaming environment.
+        It is designed for workflows where tilt-series arrive progressively,
+        allowing alignment, reconstruction, and output registration while data
+        acquisition is still ongoing.
+
+        Biologically, this protocol is intended for preparing tomograms that
+        can be directly used for visualization, particle picking, subtomogram
+        averaging, or downstream structural analysis.
+
+        General Workflow
+
+        Each incoming tilt-series is processed independently through three
+        major stages:
+
+        1. Input preparation
+           The tilt-series is converted into AreTomo-compatible input files.
+           If alignment is enabled, angle files and optional auxiliary files
+           are generated. If alignment is skipped, existing alignment
+           information is reused.
+
+        2. AreTomo execution
+           AreTomo is launched with protocol-defined parameters for alignment,
+           tomographic reconstruction, local motion correction, and optional
+           CTF estimation.
+
+        3. Output registration
+           The protocol stores the resulting aligned tilt-series, tomograms,
+           and CTF models into streaming output sets.
+
+        Streaming Behavior
+
+        A central feature of this protocol is streaming execution.
+
+        The protocol continuously monitors the input SetOfTiltSeries. Whenever
+        a new tilt-series appears, processing steps are dynamically inserted.
+        Once the input stream closes and all items have been processed, the
+        output sets are finalized automatically.
+
+        This behavior makes the protocol especially useful for facility
+        pipelines or real-time acquisition environments.
+
+        Input Requirements
+
+        The protocol requires a SetOfTiltSeries as input.
+
+        If alignment is enabled:
+            The tilt-series may be raw or preprocessed.
+
+        If alignment is skipped:
+            The tilt-series must already contain valid alignment information.
+
+        When odd/even reconstruction is requested:
+            The tilt-series metadata must include odd/even image stacks.
+
+        Main Processing Modes
+
+        Alignment + Reconstruction
+            The standard mode.
+            Tilt-series are aligned first, then reconstructed into tomograms.
+
+        Alignment Only
+            Useful when only corrected aligned tilt-series are needed.
+
+        Reconstruction Only
+            Used when tilt-series already contain alignment information.
+
+        The protocol prevents invalid configurations such as disabling both
+        alignment and reconstruction simultaneously.
+
+        Alignment Parameters
+
+        The alignment stage uses projection matching with an intermediate
+        reconstruction.
+
+        Important parameters include:
+
+        - Binning
+            Defines output sampling and computational cost.
+
+        - AlignZ
+            Defines the temporary reconstruction thickness used during
+            alignment. This is one of the most critical parameters for
+            alignment stability.
+
+        - Per-tilt-series AlignZ file
+            Allows specifying different alignment thicknesses for individual
+            tilt-series.
+
+        Biological recommendation:
+
+        AlignZ should approximate specimen thickness while remaining smaller
+        than the final tomogram thickness.
+
+        Tilt Geometry Refinement
+
+        AreTomo can refine acquisition geometry.
+
+        Tilt angle refinement:
+            - Disabled
+            - Measure only
+            - Measure and correct
+
+        Tilt axis refinement:
+            - Disabled
+            - Single refined axis
+            - Variable tilt axis over the tilt range
+
+        Biological note:
+
+        Refining tilt geometry often improves alignment quality, but erroneous
+        corrections may alter missing wedge orientation and affect downstream
+        subtomogram averaging consistency.
+
+        Tomogram Reconstruction
+
+        Tomogram generation is optional.
+
+        Reconstruction methods:
+
+        - SART
+            Iterative reconstruction with configurable iterations and
+            projections per subset.
+
+        - WBP
+            Weighted back projection.
+
+        Additional options include:
+
+        - Tomogram thickness
+        - Intensity inversion
+        - Volume flipping
+        - Odd/even half-map reconstruction
+
+        Biological interpretation:
+
+        SART often provides cleaner reconstructions with better contrast,
+        whereas WBP is faster and often useful for rapid inspection.
+
+        CTF Estimation
+
+        When alignment is enabled, AreTomo can estimate per-tilt CTF.
+
+        Optional phase-shift search can also be enabled.
+
+        The protocol stores the resulting CTF values as a SetOfCTFTomoSeries,
+        which can later be used in downstream tomography processing.
+
+        Local Motion Correction
+
+        AreTomo local motion correction can be configured in two ways:
+
+        - Coordinate-based correction
+            Suitable for isolated objects.
+
+        - Patch-based correction
+            Suitable for distributed samples.
+
+        This is especially useful when beam-induced motion varies locally
+        across the field of view.
+
+        ROI-Based Focused Alignment
+
+        The protocol supports defining a region of interest (ROI) for
+        focused alignment.
+
+        Biological importance:
+
+        When the specimen of interest is far from the tilt axis, global
+        alignment may become unstable. Restricting alignment to a biologically
+        relevant region often improves robustness.
+
+        Odd/Even Reconstruction
+
+        If odd/even stacks are available, the protocol can reconstruct
+        independent half-maps.
+
+        This is particularly useful for:
+
+        - resolution assessment
+        - half-map FSC workflows
+        - validation of tomogram quality
+
+        Output Products
+
+        Depending on protocol configuration, the outputs may include:
+
+        - Aligned tilt-series
+            Original tilt images with updated alignment transforms and refined
+            tilt geometry.
+
+        - Tomograms
+            Reconstructed volumes with correct sampling and acquisition
+            metadata.
+
+        - CTF tilt-series
+            Per-image CTF estimates.
+
+        - Failed tilt-series
+            Tilt-series that could not be processed are stored separately.
+
+        Output Validation and Quality Control
+
+        The protocol performs automatic validation of reconstructed tomograms.
+
+        A known AreTomo instability may occasionally produce malformed
+        tomograms with incorrect dimensions.
+
+        In such cases:
+            - the tomogram is rejected
+            - the failure is logged
+            - the tilt-series is skipped safely
+
+        This prevents corrupt outputs from propagating downstream.
+
+        Failure Handling
+
+        If any processing step fails:
+
+        - the tilt-series is marked as failed
+        - it is excluded from normal outputs
+        - it is written into a dedicated failed output set
+
+        This is particularly important in streaming workflows, where one bad
+        dataset should not interrupt continuous processing.
+
+        Validation Rules
+
+        The protocol validates several conditions before execution.
+
+        Important checks include:
+
+        - AlignZ must be smaller than tomogram thickness
+        - Alignment cannot be skipped if input lacks alignment metadata
+        - Odd/even reconstruction requires odd/even input data
+        - Extra IMOD output requires dose weighting
+
+        These checks prevent invalid runtime configurations.
+
+        Practical Recommendations
+
+        For most biological tomography workflows:
+
+        - Start with alignment enabled
+        - Use moderate binning
+        - Set AlignZ close to specimen thickness
+        - Use SART for higher-quality tomograms
+        - Enable CTF estimation when downstream refinement is planned
+
+        When processing large streaming datasets:
+
+        - monitor failed items
+        - inspect skipped tomograms
+        - verify tilt geometry corrections before subtomogram averaging
+
+        Final Perspective
+
+        ProtAreTomoAlignRecon is more than a reconstruction wrapper.
+
+        It is a streaming tomography processing engine that combines
+        alignment, reconstruction, geometry refinement, CTF estimation,
+        and continuous output registration.
+
+        For cryo-ET users, it provides a practical bridge between raw
+        tilt-series acquisition and analysis-ready tomographic datasets.
+    """
     _label = 'tilt-series align and reconstruct'
     _devStatus = PROD
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
