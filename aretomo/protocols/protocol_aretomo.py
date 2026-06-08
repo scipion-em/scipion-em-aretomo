@@ -469,11 +469,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             self.createOutputFailedTs(ts)
         else:
             self.createOutputTs(ts)
-            # Close explicitly the outputs (for streaming)
-            for outputName in self._possibleOutputs.keys():
-                output = getattr(self, outputName, None)
-                if output:
-                    output.close()
 
     def createOutputTs(self, ts: TiltSeries):
         try:
@@ -647,12 +642,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     outputCtfs.write()
                     self._store(outputCtfs)
 
-            # Close explicitly the outputs (for streaming)
-            for outputName in self._possibleOutputs.keys():
-                output = getattr(self, outputName, None)
-                if output:
-                    output.close()
-
     def createOutputFailedTs(self, ts: TiltSeries):
         tsId = ts.getTsId()
         logger.info(cyanStr(f'Failed TS ---> {tsId}'))
@@ -679,8 +668,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             outTsSet.update(newTs)
             outTsSet.write()
             self._store(outTsSet)
-            # Close explicitly the outputs (for streaming)
-            outTsSet.close()
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
