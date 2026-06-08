@@ -29,6 +29,7 @@
 # **************************************************************************
 import logging
 import os
+import sqlite3
 import traceback
 from collections import Counter
 
@@ -580,9 +581,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                                   newTomogram, tomoFileName, newCTFTomoSeries, ctfTomos)
 
         except Exception as e:
-            logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
-                                f'exception {e}. Skipping... '))
-            logger.error(traceback.format_exc())
+            if isinstance(e, sqlite3.OperationalError):
+                raise e
+            else:
+                logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
+                                    f'exception {e}. Skipping... '))
+                logger.error(traceback.format_exc())
 
     @retry_on_sqlite_lock(log=logger)
     def _registerOutputs(self,
@@ -655,9 +659,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         try:
             self.registerFailedOutput(ts)
         except Exception as e:
-            logger.error(redStr(f'tsId = {tsId} -> Unable to register the failed output with '
-                                f'exception {e}. Skipping... '))
-            logger.error(traceback.format_exc())
+            if isinstance(e, sqlite3.OperationalError):
+                raise e
+            else:
+                logger.error(redStr(f'tsId = {tsId} -> Unable to register the failed output with '
+                                    f'exception {e}. Skipping... '))
+                logger.error(traceback.format_exc())
 
     @retry_on_sqlite_lock(log=logger)
     def registerFailedOutput(self, ts: TiltSeries):
