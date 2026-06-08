@@ -45,7 +45,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yellowStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -338,42 +338,46 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         outputsToCheck = self._getOutputsToCheck()
 
         while True:
-            with self._lock:
+            try:
                 listTSInput = set(inTsSet.getTSIds())
 
-            # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
-            # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
-            # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
-            if not inTsSet.isStreamOpen() and Counter(self.TS_read) == Counter(listTSInput):
-                logger.info(cyanStr('Input set closed, all items processed\n'))
-                self._insertFunctionStep(self.closeOutputSetStep,
-                                         outputsToCheck,
-                                         prerequisites=closeSetStepDeps,
-                                         needsGPU=False)
-                break
+                # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
+                # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
+                # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
+                if not inTsSet.isStreamOpen() and Counter(self.TS_read) == Counter(listTSInput):
+                    logger.info(cyanStr('Input set closed, all items processed\n'))
+                    self._insertFunctionStep(self.closeOutputSetStep,
+                                             outputsToCheck,
+                                             prerequisites=closeSetStepDeps,
+                                             needsGPU=False)
+                    break
 
-            nonProcessedTsIds = listTSInput - set(self.TS_read)
-            tsToProcessDict = {tsId: ts.clone() for ts in inTsSet.iterItems()
-                               if (tsId := ts.getTsId()) in nonProcessedTsIds  # Only not processed tsIds
-                               and ts.getSize() > 0}  # Avoid processing empty TS
-            for tsId, ts in tsToProcessDict.items():
-                    convertInput = self._insertFunctionStep(self.convertInputStep, ts,
-                                                            prerequisites=[],
-                                                            needsGPU=False)
-                    runAreTomo = self._insertFunctionStep(self.runAreTomoStep, ts,
-                                                          prerequisites=[convertInput],
-                                                          needsGPU=True)
-                    createOutputS = self._insertFunctionStep(self.createOutputStep, ts,
-                                                             prerequisites=[runAreTomo],
-                                                             needsGPU=False)
-                    closeSetStepDeps.append(createOutputS)
-                    logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
-                    self.TS_read.append(tsId)
+                nonProcessedTsIds = listTSInput - set(self.TS_read)
+                tsToProcessDict = {tsId: ts.clone() for ts in inTsSet.iterItems()
+                                   if (tsId := ts.getTsId()) in nonProcessedTsIds  # Only not processed tsIds
+                                   and ts.getSize() > 0}  # Avoid processing empty TS
+                for tsId, ts in tsToProcessDict.items():
+                        convertInput = self._insertFunctionStep(self.convertInputStep, ts,
+                                                                prerequisites=[],
+                                                                needsGPU=False)
+                        runAreTomo = self._insertFunctionStep(self.runAreTomoStep, ts,
+                                                              prerequisites=[convertInput],
+                                                              needsGPU=True)
+                        createOutputS = self._insertFunctionStep(self.createOutputStep, ts,
+                                                                 prerequisites=[runAreTomo],
+                                                                 needsGPU=False)
+                        closeSetStepDeps.append(createOutputS)
+                        logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
+                        self.TS_read.append(tsId)
 
-            time.sleep(10)
-            if inTsSet.isStreamOpen():
-                with self._lock:
+                time.sleep(10)
+                if inTsSet.isStreamOpen():
                     inTsSet.loadAllProperties() # refresh status for the streaming
+            except Exception as e:
+                logger.warning(yellowStr(f'stepsGeneratorStep failed with exception: {e}. '
+                                         f'Sleeping for 10 seconds...'))
+                time.sleep(10)
+                continue
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, ts: TiltSeries):
@@ -484,78 +488,45 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 if secNum in AretomoAln.sections:
                     finalIndsAliDict[origInd] = AretomoAln.sections.index(secNum)
 
-            self._registerOutput(ts, aretomoAln, finalIndsAliDict)
+            tsId = ts.getTsId()
+            firstItem = ts.getFirstEnabledItem()
+            tsFn = firstItem.getFileName()
+            extraPrefix = self._getExtraPath(tsId)
+            alignmentMatrix = getTransformationMatrix(aretomoAln.imod_matrix)
+            finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
 
-        except Exception as e:
-            logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
-                                f'exception {e}. Skipping... '))
-            logger.error(traceback.format_exc())
+            # Build objects outside the lock
+            newTomogram = None
+            badReconstruction = False
+            newTs = None
+            tiltImages = []
+            newCTFTomoSeries = None
+            ctfTomos = []
+            tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
 
-    @retry_on_sqlite_lock(log=logger)
-    def _registerOutput(self, ts: TiltSeries, aretomoAln: Type[AretomoAln], finalIndsAliDict: dict):
-        tsId = ts.getTsId()
-        firstItem = ts.getFirstEnabledItem()
-        tsFn = firstItem.getFileName()
-        extraPrefix = self._getExtraPath(tsId)
-        alignmentMatrix = getTransformationMatrix(aretomoAln.imod_matrix)
-        finalInds = list(finalIndsAliDict.keys())  # Final enabled indices in the original TS
-        with self._lock:
             if self.makeTomo:
-                # Some combinations of the graphic card and cuda toolkit seem to be unstable. Aretomo devs think it may be
-                # related to graphic cards with a compute capability greater than 8.6. The behavior observed is detailed
-                # below:
-                #
-                # The non-systematic behavior reported is based on the fact that the dimensions of the tomograms
-                # reconstructed (bin 4) are:
-                #
-                # Sometimes both are well --> dimensions: 958 x 926 x 300
-                # Sometimes both are wrong --> dimensions: 958 x no.TiltImages x 926
-                # Sometimes one is well and the other wrong, changing the one which is well and the one which is wrong
-                # across multiple executions.
-                #
-                # Until it's clarified, we'll check the dimensions of the generated tomogram and avoid storing the
-                # corresponding results if it was badly generated (consequence of a bad alignment with weird tilt angle
-                # values, see comment above).
-                #
-                # Hence, the output tilt angles will be checked before storing the corresponding outputs
-                tomoFileName = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
                 tomoDims = self._getOutputDim(tomoFileName)
                 if np.any(np.array(tomoDims) == len(ts)):
-                    msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(tomoDims))
-                    self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
-                    outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
-                    self.badTomoRecMsg.set(outMsg)
-                    self._store(self.badTomoRecMsg)
-                    return
-                outputSetOfTomograms = self.getOutputSetOfTomograms()
-                # Tomogram attributes
-                newTomogram = Tomogram()
-                newTomogram.setLocation(tomoFileName)
-                newTomogram.setSamplingRate(outputSetOfTomograms.getSamplingRate())
-                newTomogram.setOrigin()
-                newTomogram.setAcquisition(ts.getAcquisition())
-                newTomogram.setTsId(tsId)
-                newTomogram.setCtfCorrected(ts.ctfCorrected())
-                if self.doEvenOdd.get():
-                    newTomogram.setHalfMaps([self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT),
-                                             self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)])
-                outputSetOfTomograms.append(newTomogram)
-                outputSetOfTomograms.update(newTomogram)
-                outputSetOfTomograms.write()
-                self._store(outputSetOfTomograms)
-            else:
-                # remove aligned stack from output
-                pwutils.cleanPath(self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT))
+                    badReconstruction = True
+                else:
+                    newTomogram = Tomogram()
+                    newTomogram.setLocation(tomoFileName)
+                    newTomogram.setSamplingRate(self._getOutputSampling())
+                    newTomogram.setOrigin()
+                    newTomogram.setAcquisition(ts.getAcquisition())
+                    newTomogram.setTsId(tsId)
+                    newTomogram.setCtfCorrected(ts.ctfCorrected())
+                    if self.doEvenOdd.get():
+                        newTomogram.setHalfMaps([self.getFilePath(tsFn, extraPrefix, tsId, suffix=ODD, ext=MRC_EXT),
+                                                 self.getFilePath(tsFn, extraPrefix, tsId, suffix=EVEN, ext=MRC_EXT)])
 
-            # Save original TS stack with new alignment,
-            # unless making a tomo from pre-aligned TS
             if not (self.makeTomo and self.skipAlign):
-                outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
+                inputSampling = self._getInputSampling()
+                # inputDim = self._getSetOfTiltSeries().getDim()
                 newTs = TiltSeries()
                 newTs.copyInfo(ts)
-                newTs.setSamplingRate(self._getInputSampling())
+                newTs.setSamplingRate(inputSampling)
                 newTs.setAlignment2D()
-                outputSetOfTiltSeries.append(newTs)
 
                 for i, tiltImage in enumerate(ts.iterItems(orderBy=TiltImage.INDEX_FIELD)):
                     newTi = tiltImage.clone()
@@ -564,14 +535,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     ind = i + 1
 
                     if ind in finalInds:
-                        # Set the tilt angles
                         secIndex = finalIndsAliDict[ind]
                         acq = tiltImage.getAcquisition()
                         newTi.setTiltAngle(aretomoAln.tilt_angles[secIndex])
                         acq.setTiltAxisAngle(aretomoAln.tilt_axes[secIndex])
                         newTi.setAcquisition(acq)
-
-                        # set Transform
                         m = alignmentMatrix[:, :, secIndex]
                         transform.setMatrix(m)
                     else:
@@ -579,35 +547,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                         transform.setMatrix(np.identity(3))
 
                     newTi.setTransform(transform)
-                    newTi.setSamplingRate(self._getInputSampling())
-                    newTs.append(newTi)
+                    newTi.setSamplingRate(inputSampling)
+                    tiltImages.append(newTi)
 
-                # update tilt axis angle for TS with the first value only
-                acq = newTs.getAcquisition()
-                acq.setTiltAxisAngle(aretomoAln.tilt_axes[0])
-                newTs.setAcquisition(acq)
-
-                newTs.setDim(self._getSetOfTiltSeries().getDim())
-                newTs.write(properties=False)
-
-                outputSetOfTiltSeries.update(newTs)
-                outputSetOfTiltSeries.write()
-                self._store(outputSetOfTiltSeries)
-
-                # Output set of CTF tomo series
                 if self.doEstimateCtf:
-                    outputCtfs = self.getOutputSetOfCtfs()
-
-                    newCTFTomoSeries = CTFTomoSeries()
-                    newCTFTomoSeries.copyInfo(newTs)
-                    newCTFTomoSeries.setTiltSeries(newTs)
-                    newCTFTomoSeries.setTsId(tsId)
-                    outputCtfs.append(newCTFTomoSeries)
-
                     aretomoCtfFile = self.getFilePath(tsFn, extraPrefix, tsId, suffix="ctf", ext=".txt")
                     psdFile = pwutils.replaceExt(aretomoCtfFile, 'mrc')
                     psdFile = psdFile if os.path.exists(psdFile) else None
                     ctfResult = AretomoCtfParser.readAretomoCtfOutput(aretomoCtfFile)
+                    newCTFTomoSeries = CTFTomoSeries()
+                    newCTFTomoSeries.copyInfo(newTs)
+                    newCTFTomoSeries.setTiltSeries(newTs)
+                    newCTFTomoSeries.setTsId(tsId)
 
                     for i, tiltImage in enumerate(ts.iterItems()):
                         ctf = CTFModel()
@@ -622,33 +573,107 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                             newCtfTomo.setEnabled(False)
 
                         newCtfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
+                        ctfTomos.append(newCtfTomo)
+
+            # Minimal lock scope: only DB writes
+            self._registerOutputs(tsId, badReconstruction, newTs, tsFn, tiltImages, aretomoAln,
+                                  newTomogram, tomoFileName, newCTFTomoSeries, ctfTomos)
+
+        except Exception as e:
+            logger.error(redStr(f'tsId = {ts.getTsId()} -> Unable to register the output with '
+                                f'exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
+
+    @retry_on_sqlite_lock(log=logger)
+    def _registerOutputs(self,
+                         tsId: str,
+                         badReconstruction: bool,
+                         newTs: Optional[TiltSeries],
+                         tsFn: str,
+                         tiltImages: List[TiltImage],
+                         aretomoAln: Type[AretomoAln],
+                         newTomogram: Optional[Tomogram],
+                         tomoFileName: str,
+                         newCTFTomoSeries: Optional[CTFTomoSeries],
+                         ctfTomos: List[CTFTomo]) -> None:
+        with self._lock:
+            if self.makeTomo:
+                if badReconstruction:
+                    msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(self._getOutputDim(
+                        tomoFileName)))
+                    self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
+                    outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
+                    self.badTomoRecMsg.set(outMsg)
+                    self._store(self.badTomoRecMsg)
+                    return
+                outputSetOfTomograms = self.getOutputSetOfTomograms()
+                outputSetOfTomograms.append(newTomogram)
+                outputSetOfTomograms.update(newTomogram)
+                outputSetOfTomograms.write()
+                self._store(outputSetOfTomograms)
+            else:
+                pwutils.cleanPath(self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=MRC_EXT))
+
+            if not (self.makeTomo and self.skipAlign):
+                outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
+                outputSetOfTiltSeries.append(newTs)
+
+                for newTi in tiltImages:
+                    newTs.append(newTi)
+
+                acq = newTs.getAcquisition()
+                acq.setTiltAxisAngle(aretomoAln.tilt_axes[0])
+                newTs.setAcquisition(acq)
+
+                # newTs.setDim(inputDim)
+                newTs.write(properties=False)
+
+                outputSetOfTiltSeries.update(newTs)
+                outputSetOfTiltSeries.write()
+                self._store(outputSetOfTiltSeries)
+
+                if self.doEstimateCtf:
+                    outputCtfs = self.getOutputSetOfCtfs()
+                    outputCtfs.append(newCTFTomoSeries)
+
+                    for newCtfTomo in ctfTomos:
                         newCTFTomoSeries.append(newCtfTomo)
 
                     outputCtfs.update(newCTFTomoSeries)
                     outputCtfs.write()
                     self._store(outputCtfs)
 
+            # Close explicitly the outputs (for streaming)
+            for outputName in self._possibleOutputs.keys():
+                output = getattr(self, outputName, None)
+                if output:
+                    output.close()
+
     def createOutputFailedTs(self, ts: TiltSeries):
         tsId = ts.getTsId()
         logger.info(cyanStr(f'Failed TS ---> {tsId}'))
         try:
-            with self._lock:
-                inTsSet = self._getSetOfTiltSeries()
-                outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
-                newTs = TiltSeries()
-                newTs.copyInfo(ts)
-                outTsSet.append(newTs)
-                newTs.copyItems(ts)
-                newTs.write()
-                outTsSet.update(newTs)
-                outTsSet.write()
-                self._store(outTsSet)
-                # Close explicitly the outputs (for streaming)
-                outTsSet.close()
+            self.registerFailedOutput(ts)
         except Exception as e:
             logger.error(redStr(f'tsId = {tsId} -> Unable to register the failed output with '
                                 f'exception {e}. Skipping... '))
             logger.error(traceback.format_exc())
+
+    @retry_on_sqlite_lock(log=logger)
+    def registerFailedOutput(self, ts: TiltSeries):
+        with self._lock:
+            inTsSet = self._getSetOfTiltSeries()
+            outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
+            newTs = TiltSeries()
+            newTs.copyInfo(ts)
+            outTsSet.append(newTs)
+            newTs.copyItems(ts)
+            newTs.write()
+            outTsSet.update(newTs)
+            outTsSet.write()
+            self._store(outTsSet)
+            # Close explicitly the outputs (for streaming)
+            outTsSet.close()
 
     def closeOutputSetStep(self, attrib: Union[List[str], str]):
         self._closeOutputSet()
@@ -856,8 +881,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
     def getFilePath(tsFn: Union[str, os.PathLike],
                     prefix: str,
                     tsId: str,
-                    suffix: Optional[str] = '',
-                    ext: Optional[str] = None) -> Union[str, os.PathLike]:
+                    suffix: str = '',
+                    ext: str = '') -> str:
         fileExtension = ext if ext else getExt(tsFn)
         if suffix:
             suffix = suffix if suffix.startswith('_') else '_' + suffix
