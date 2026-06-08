@@ -523,8 +523,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 newTs.copyInfo(ts)
                 newTs.setSamplingRate(inputSampling)
                 newTs.setAlignment2D()
+                tiList = ts.loadTiltImgsInMemory()
+                tiList.sort(key=lambda item: item.getIndex())
 
-                for i, tiltImage in enumerate(ts.iterItems(orderBy=TiltImage.INDEX_FIELD)):
+                for i, tiltImage in enumerate(tiList):
                     newTi = tiltImage.clone()
                     newTi.copyInfo(tiltImage, copyId=True, copyTM=False)
                     transform = Transform()
@@ -556,7 +558,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     newCTFTomoSeries.setTiltSeries(newTs)
                     newCTFTomoSeries.setTsId(tsId)
 
-                    for i, tiltImage in enumerate(ts.iterItems()):
+                    for i, tiltImage in enumerate(ts.loadTiltImgsInMemory()):
                         ctf = CTFModel()
                         ind = i + 1
                         if ind in finalInds:
@@ -1000,7 +1002,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         input tilt-series."""
         indexDict = {}
         newInd = 1
-        for ti in ts.iterItems():
+        for ti in ts.loadTiltImgsInMemory():
             if ti.isEnabled():
                 indexDict[newInd] = ti.getIndex()
                 newInd += 1
