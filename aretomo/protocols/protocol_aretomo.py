@@ -50,6 +50,7 @@ from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yello
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
+from tomo.utils import sleepRandomly
 
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
@@ -340,7 +341,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
 
         while True:
             try:
-                listTSInput = set(inTsSet.getTSIds())
+                listTSInput = inTsSet.getTSIds()
 
                 # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
                 # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
@@ -378,13 +379,13 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
                     self.TS_read.append(tsId)
 
-                time.sleep(10)
+                sleepRandomly()
                 if inTsSet.isStreamOpen():
                     inTsSet.loadAllProperties()  # refresh status for the streaming
+
             except Exception as e:
-                logger.error(yellowStr(f'stepsGeneratorStep failed with exception: {e}. '
-                                       f'Sleeping for 10 seconds...'))
-                time.sleep(10)
+                logger.error(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
+                sleepRandomly()
                 continue
 
     # --------------------------- STEPS functions -----------------------------
