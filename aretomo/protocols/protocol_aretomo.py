@@ -353,7 +353,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
 
                 nonProcessedTsIds = listTSInput - set(self.TS_read)
                 if nonProcessedTsIds:
-                    tsToProcessDict = inTsSet.fetchNewTs(tsIds=nonProcessedTsIds)
+                    tsToProcessDict = inTsSet.fetchNewTs(nonProcessedTsIds)
                     for tsId, ts in tsToProcessDict.items():
                         firstItem = ts.getFirstEnabledItem(loadImgsInMemory=True)
                         convertInput = self._insertFunctionStep(self.convertInputStep,
