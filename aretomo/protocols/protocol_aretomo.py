@@ -597,6 +597,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                          tomoFileName: str,
                          newCTFTomoSeries: Optional[CTFTomoSeries],
                          ctfTomos: List[CTFTomo]) -> None:
+        setsToClose = []
         with self._lock:
             if self.makeTomo:
                 if badReconstruction:
@@ -612,6 +613,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 outputSetOfTomograms.update(newTomogram)
                 outputSetOfTomograms.write()
                 self._store(outputSetOfTomograms)
+                setsToClose.append(outputSetOfTomograms)
             else:
                 pwutils.cleanPath(self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=MRC_EXT))
 
@@ -626,12 +628,12 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 acq.setTiltAxisAngle(aretomoAln.tilt_axes[0])
                 newTs.setAcquisition(acq)
 
-                # newTs.setDim(inputDim)
                 newTs.write(properties=False)
 
                 outputSetOfTiltSeries.update(newTs)
                 outputSetOfTiltSeries.write()
                 self._store(outputSetOfTiltSeries)
+                setsToClose.append(outputSetOfTiltSeries)
 
                 if self.doEstimateCtf:
                     outputCtfs = self.getOutputSetOfCtfs()
@@ -643,6 +645,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     outputCtfs.update(newCTFTomoSeries)
                     outputCtfs.write()
                     self._store(outputCtfs)
+                    setsToClose.append(outputCtfs)
+
+        for s in setsToClose:
+            s.close()
 
     def createOutputFailedTs(self, ts: TiltSeries):
         tsId = ts.getTsId()
