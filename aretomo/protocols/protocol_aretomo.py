@@ -32,11 +32,8 @@ import os
 import sqlite3
 import traceback
 from collections import Counter
-
 import numpy as np
-import time
 from typing import List, Tuple, Union, Optional, Type
-
 from pwem import ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
@@ -50,7 +47,7 @@ from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yello
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
-from tomo.utils import sleepRandomly
+from tomo.utils import sleepRandomly, refreshStreaming
 
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
@@ -355,38 +352,41 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     break
 
                 nonProcessedTsIds = listTSInput - set(self.TS_read)
-                tsToProcessDict = {tsId: ts.clone() for ts in inTsSet.iterItems()
-                                   if (tsId := ts.getTsId()) in nonProcessedTsIds  # Only not processed tsIds
-                                   and ts.getSize() > 0}  # Avoid processing empty TS
-                for tsId, ts in tsToProcessDict.items():
-                    firstItem = ts.getFirstEnabledItem(loadImgsInMemory=True)
-                    convertInput = self._insertFunctionStep(self.convertInputStep,
-                                                            ts,
-                                                            firstItem,
-                                                            prerequisites=[],
-                                                            needsGPU=False)
-                    runAreTomo = self._insertFunctionStep(self.runAreTomoStep,
-                                                          ts,
-                                                          firstItem,
-                                                          prerequisites=[convertInput],
-                                                          needsGPU=True)
-                    createOutputS = self._insertFunctionStep(self.createOutputStep,
-                                                             ts,
-                                                             firstItem,
-                                                             prerequisites=[runAreTomo],
-                                                             needsGPU=False)
-                    closeSetStepDeps.append(createOutputS)
-                    logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
-                    self.TS_read.append(tsId)
+                if nonProcessedTsIds:
+                    tsToProcessDict = inTsSet.fetchNewTs(tsIds=nonProcessedTsIds)
+                    for tsId, ts in tsToProcessDict.items():
+                        firstItem = ts.getFirstEnabledItem(loadImgsInMemory=True)
+                        convertInput = self._insertFunctionStep(self.convertInputStep,
+                                                                ts,
+                                                                firstItem,
+                                                                prerequisites=[],
+                                                                needsGPU=False)
+                        runAreTomo = self._insertFunctionStep(self.runAreTomoStep,
+                                                              ts,
+                                                              firstItem,
+                                                              prerequisites=[convertInput],
+                                                              needsGPU=True)
+                        createOutputS = self._insertFunctionStep(self.createOutputStep,
+                                                                 ts,
+                                                                 firstItem,
+                                                                 prerequisites=[runAreTomo],
+                                                                 needsGPU=False)
+                        closeSetStepDeps.append(createOutputS)
+                        logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
+                        self.TS_read.append(tsId)
 
-                sleepRandomly()
-                if inTsSet.isStreamOpen():
-                    inTsSet.loadAllProperties()  # refresh status for the streaming
+                refreshStreaming(inTsSet)
 
             except Exception as e:
                 logger.error(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
                 sleepRandomly()
                 continue
+
+    @staticmethod
+    @retry_on_sqlite_lock(log=logger)
+    def _safeRefreshStreamStatus(inSet: SetOfTiltSeries) -> None:
+        if inSet.isStreamOpen():
+            inSet.loadAllProperties()  # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, ts: TiltSeries, firstItem: TiltImage):
