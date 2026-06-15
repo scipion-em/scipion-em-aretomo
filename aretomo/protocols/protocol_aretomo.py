@@ -47,7 +47,7 @@ from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yello
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
-from tomo.utils import sleepRandomly, refreshStreaming
+from tomo.utils import sleepRandomly, refreshStreaming, isStreamClosed, genDoneFile
 
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
@@ -343,7 +343,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
                 # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
                 # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
-                if not inTsSet.isStreamOpen() and Counter(self.TS_read) == Counter(listTSInput):
+                if isStreamClosed(self) and Counter(self.TS_read) == Counter(listTSInput):
                     logger.info(cyanStr('Input set closed, all items processed\n'))
                     self._insertFunctionStep(self.closeOutputSetStep,
                                              outputsToCheck,
@@ -375,18 +375,18 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                         logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
                         self.TS_read.append(tsId)
 
-                refreshStreaming(inTsSet)
+                sleepRandomly()
 
             except Exception as e:
                 logger.error(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
                 sleepRandomly()
                 continue
 
-    @staticmethod
-    @retry_on_sqlite_lock(log=logger)
-    def _safeRefreshStreamStatus(inSet: SetOfTiltSeries) -> None:
-        if inSet.isStreamOpen():
-            inSet.loadAllProperties()  # refresh status for the streaming
+    # @staticmethod
+    # @retry_on_sqlite_lock(log=logger)
+    # def _safeRefreshStreamStatus(inSet: SetOfTiltSeries) -> None:
+    #     if inSet.isStreamOpen():
+    #         inSet.loadAllProperties()  # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, ts: TiltSeries, firstItem: TiltImage):
@@ -682,6 +682,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         if failedOutputList:
             raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
                             f'Output Log > run.stdout and run.stderr')
+        genDoneFile(self)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self) -> List[str]:
