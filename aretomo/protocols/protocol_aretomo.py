@@ -47,7 +47,9 @@ from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yello
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
-from tomo.utils import sleepRandomly, refreshStreaming, isStreamClosed, genDoneFile
+from tomo.utils import sleepRandomly
+from pwem import (genExecStatusDir, appendStreamItem, closeStreamJournal,
+                  touchHeartbeat, STREAM_HEARTBEAT_TIMEOUT)
 
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
@@ -333,23 +335,44 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         """
         closeSetStepDeps = []
         inTsSet = self._getSetOfTiltSeries()
+        genExecStatusDir(self)
         self.readingOutput()
         outputsToCheck = self._getOutputsToCheck()
 
         while True:
             try:
+                # Refresh this protocol's heartbeat so its own consumers can tell
+                # it is alive even during long gaps with no new tilt-series.
+                touchHeartbeat(self)
+                # Discover ready tsIds from the producer's append-only journal
+                # (filesystem), not from its live SQLite set.
                 listTSInput = inTsSet.getTSIds()
 
                 # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
                 # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
                 # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
-                if isStreamClosed(self) and Counter(self.TS_read) == Counter(listTSInput):
+                if inTsSet.isStreamClosed() and Counter(self.TS_read) == Counter(listTSInput):
                     logger.info(cyanStr('Input set closed, all items processed\n'))
                     self._insertFunctionStep(self.closeOutputSetStep,
                                              outputsToCheck,
                                              prerequisites=closeSetStepDeps,
                                              needsGPU=False)
                     break
+
+                # Producer-liveness: if the stream was never closed but the
+                # producer's heartbeat is stale, it likely died. Close gracefully
+                # with whatever was processed instead of looping forever.
+                if not inTsSet.isStreamClosed():
+                    hbAge = inTsSet.getProducerHeartbeatAge()
+                    if hbAge is not None and hbAge > STREAM_HEARTBEAT_TIMEOUT:
+                        logger.error(redStr(
+                            f'Producer heartbeat stale ({hbAge:.0f}s) and stream not '
+                            f'closed; closing with partial outputs.'))
+                        self._insertFunctionStep(self.closeOutputSetStep,
+                                                 outputsToCheck,
+                                                 prerequisites=closeSetStepDeps,
+                                                 needsGPU=False)
+                        break
 
                 nonProcessedTsIds = listTSInput - set(self.TS_read)
                 if nonProcessedTsIds:
@@ -474,6 +497,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             self.createOutputFailedTs(ts)
         else:
             self.createOutputTs(ts, firstItem.getFileName())
+            # Publish this tsId to our own stream journal for downstream consumers.
+            appendStreamItem(self, tsId)
 
     def createOutputTs(self, ts: TiltSeries, tsFn: str):
         try:
@@ -682,7 +707,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         if failedOutputList:
             raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
                             f'Output Log > run.stdout and run.stderr')
-        genDoneFile(self)
+        closeStreamJournal(self)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self) -> List[str]:
