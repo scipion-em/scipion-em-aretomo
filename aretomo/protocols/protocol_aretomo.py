@@ -402,14 +402,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
 
             except Exception as e:
                 logger.error(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
+                logger.error(traceback.format_exc())
                 sleepRandomly()
                 continue
-
-    # @staticmethod
-    # @retry_on_sqlite_lock(log=logger)
-    # def _safeRefreshStreamStatus(inSet: SetOfTiltSeries) -> None:
-    #     if inSet.isStreamOpen():
-    #         inSet.loadAllProperties()  # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, ts: TiltSeries, firstItem: TiltImage):
