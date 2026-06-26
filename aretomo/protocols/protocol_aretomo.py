@@ -31,14 +31,12 @@ import logging
 import os
 import sqlite3
 import traceback
-from collections import Counter
 import numpy as np
 from typing import List, Tuple, Union, Optional, Type
 from pwem import ALIGN_2D
 from pyworkflow.protocol import params, STEPS_PARALLEL
 from pyworkflow.constants import PROD
 from pyworkflow.object import Set, String, Pointer
-from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
@@ -47,10 +45,9 @@ from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yello
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
-from tomo.utils import sleepRandomly
-from pwem import (genExecStatusDir, appendStreamItem, closeStreamJournal,
-                  touchHeartbeat, STREAM_HEARTBEAT_TIMEOUT)
-
+from tomo.protocols.protocol_base_streaming_tomo import ProtocolBaseStreamingTomo
+from tomo.utils import sleepRandomly, writeTsSidecar, writeCtfSidecar
+from pwem import genExecStatusDir, getExecStatusDir, appendStreamItem
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
 from ..convert.dataimport import AretomoCtfParser
@@ -68,7 +65,7 @@ MRC_EXT = '.mrc'
 MRCS_EXT = '.mrcs'
 
 
-class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
+class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
     """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
     _label = 'tilt-series align and reconstruct'
     _devStatus = PROD
@@ -327,6 +324,15 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         form.addParallelSection(threads=3, mpi=0)
 
     # --------------------------- INSERT steps functions ----------------------
+    def _insertAllSteps(self) -> None:
+        inTsSet = self._getSetOfTiltSeries()
+        if inTsSet.isStreamOpen():
+            self._insertFunctionStep(self.stepsGeneratorStep,
+                                     prerequisites=[],
+                                     needsGPU=False)
+        else:
+            self._insertNonStreamingSteps()
+
     def stepsGeneratorStep(self) -> None:
         """
         This step should be implemented by any streaming protocol.
@@ -341,60 +347,23 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
 
         while True:
             try:
-                # Refresh this protocol's heartbeat so its own consumers can tell
-                # it is alive even during long gaps with no new tilt-series.
-                touchHeartbeat(self)
                 # Discover ready tsIds from the producer's append-only journal
                 # (filesystem), not from its live SQLite set.
-                listTSInput = inTsSet.getTSIds()
-
-                # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
-                # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
-                # ['ts_a', 'ts_b'] != ['ts_b', 'ts_a'], but they are the same with Counter.
-                if inTsSet.isStreamClosed() and Counter(self.TS_read) == Counter(listTSInput):
-                    logger.info(cyanStr('Input set closed, all items processed\n'))
-                    self._insertFunctionStep(self.closeOutputSetStep,
-                                             outputsToCheck,
-                                             prerequisites=closeSetStepDeps,
-                                             needsGPU=False)
+                inTsIds = set(inTsSet.getTSIds())
+                if self._stopGeneratingSteps(inTsSet,
+                                             inTsIds=inTsIds,
+                                             tsIdReadList=self.TS_read,
+                                             outputNames=outputsToCheck,
+                                             closeSetStepDeps=closeSetStepDeps):
                     break
 
-                # Producer-liveness: if the stream was never closed but the
-                # producer's heartbeat is stale, it likely died. Close gracefully
-                # with whatever was processed instead of looping forever.
-                if not inTsSet.isStreamClosed():
-                    hbAge = inTsSet.getProducerHeartbeatAge()
-                    if hbAge is not None and hbAge > STREAM_HEARTBEAT_TIMEOUT:
-                        logger.error(redStr(
-                            f'Producer heartbeat stale ({hbAge:.0f}s) and stream not '
-                            f'closed; closing with partial outputs.'))
-                        self._insertFunctionStep(self.closeOutputSetStep,
-                                                 outputsToCheck,
-                                                 prerequisites=closeSetStepDeps,
-                                                 needsGPU=False)
-                        break
-
-                nonProcessedTsIds = listTSInput - set(self.TS_read)
+                nonProcessedTsIds = inTsIds - set(self.TS_read)
                 if nonProcessedTsIds:
+                    # Rebuild each new tilt-series in memory from the producer's JSON
+                    # sidecar (no producer-DB read).
                     tsToProcessDict = inTsSet.fetchNewTs(nonProcessedTsIds)
                     for tsId, ts in tsToProcessDict.items():
-                        firstItem = ts.getFirstEnabledItem(loadImgsInMemory=True)
-                        convertInput = self._insertFunctionStep(self.convertInputStep,
-                                                                ts,
-                                                                firstItem,
-                                                                prerequisites=[],
-                                                                needsGPU=False)
-                        runAreTomo = self._insertFunctionStep(self.runAreTomoStep,
-                                                              ts,
-                                                              firstItem,
-                                                              prerequisites=[convertInput],
-                                                              needsGPU=True)
-                        createOutputS = self._insertFunctionStep(self.createOutputStep,
-                                                                 ts,
-                                                                 firstItem,
-                                                                 prerequisites=[runAreTomo],
-                                                                 needsGPU=False)
-                        closeSetStepDeps.append(createOutputS)
+                        self._insertCommonSteps(ts, closeSetStepDeps)
                         logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
                         self.TS_read.append(tsId)
 
@@ -405,6 +374,37 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 logger.error(traceback.format_exc())
                 sleepRandomly()
                 continue
+
+    def _insertNonStreamingSteps(self):
+        closeSetStepDeps = []
+        inTsSet = self._getSetOfTiltSeries()
+        outputsToCheck = self._getOutputsToCheck()
+        tsList = [ts.clone() for ts in inTsSet.iterItems()]
+        for ts in tsList:
+            self._insertCommonSteps(ts, closeSetStepDeps)
+        self._insertFunctionStep(self._closeOutputSet,
+                                 outputsToCheck,
+                                 prerequisites=closeSetStepDeps,
+                                 needsGPU=False)
+
+    def _insertCommonSteps(self, ts: TiltSeries, closeSetStepDeps: List[int]) -> None:
+        firstItem = ts.getFirstEnabledItem()
+        convertInput = self._insertFunctionStep(self.convertInputStep,
+                                                ts,
+                                                firstItem,
+                                                prerequisites=[],
+                                                needsGPU=False)
+        runAreTomo = self._insertFunctionStep(self.runAreTomoStep,
+                                              ts,
+                                              firstItem,
+                                              prerequisites=[convertInput],
+                                              needsGPU=True)
+        createOutputS = self._insertFunctionStep(self.createOutputStep,
+                                                 ts,
+                                                 firstItem,
+                                                 prerequisites=[runAreTomo],
+                                                 needsGPU=False)
+        closeSetStepDeps.append(createOutputS)
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, ts: TiltSeries, firstItem: TiltImage):
@@ -492,8 +492,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             self.createOutputFailedTs(ts)
         else:
             self.createOutputTs(ts, firstItem.getFileName())
-            # Publish this tsId to our own stream journal for downstream consumers.
-            appendStreamItem(self, tsId)
 
     def createOutputTs(self, ts: TiltSeries, tsFn: str):
         try:
@@ -594,8 +592,25 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                         ctfTomos.append(newCtfTomo)
 
             # Minimal lock scope: only DB writes
-            self._registerOutputs(tsId, badReconstruction, newTs, tsFn, tiltImages, aretomoAln,
-                                  newTomogram, tomoFileName, newCTFTomoSeries, ctfTomos)
+            registered = self._registerOutputs(tsId, badReconstruction, newTs, tsFn, tiltImages, aretomoAln,
+                                               newTomogram, tomoFileName, newCTFTomoSeries, ctfTomos)
+
+            # Streaming only: publish the per-item sidecars + journal id so a
+            # downstream streaming consumer rebuilds this item in memory WITHOUT
+            # reading our live SQLite set. Built from the in-memory objects (no DB
+            # read), outside the registration lock. Only the output types that
+            # have a sidecar reader are published (TiltSeries -> fetchNewTs,
+            # CTFTomoSeries -> fetchNewCtfs; tomograms have no sidecar pipeline).
+            # The status dir is created by stepsGeneratorStep; in batch mode it
+            # does not exist, so nothing is published (outputs are then consumed
+            # via the DB / STREAM_CLOSED state).
+            if registered and os.path.exists(getExecStatusDir(self)):
+                statusDir = getExecStatusDir(self)
+                if newTs is not None and tiltImages:
+                    writeTsSidecar(statusDir, newTs, tiltImages)
+                if newCTFTomoSeries is not None and ctfTomos:
+                    writeCtfSidecar(statusDir, newCTFTomoSeries, ctfTomos)
+                appendStreamItem(self, tsId)
 
         except Exception as e:
             if isinstance(e, sqlite3.OperationalError):
@@ -616,7 +631,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                          newTomogram: Optional[Tomogram],
                          tomoFileName: str,
                          newCTFTomoSeries: Optional[CTFTomoSeries],
-                         ctfTomos: List[CTFTomo]) -> None:
+                         ctfTomos: List[CTFTomo]) -> bool:
         with self._lock:
             if self.makeTomo:
                 if badReconstruction:
@@ -626,7 +641,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
                     self.badTomoRecMsg.set(outMsg)
                     self._store(self.badTomoRecMsg)
-                    return
+                    # Nothing registered for this tsId -> no sidecar/journal.
+                    return False
                 outputSetOfTomograms = self.getOutputSetOfTomograms()
                 outputSetOfTomograms.append(newTomogram)
                 outputSetOfTomograms.update(newTomogram)
@@ -664,6 +680,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                     outputCtfs.write()
                     self._store(outputCtfs)
 
+        return True
+
     def createOutputFailedTs(self, ts: TiltSeries):
         tsId = ts.getTsId()
         logger.info(cyanStr(f'Failed TS ---> {tsId}'))
@@ -690,19 +708,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             outTsSet.update(newTs)
             outTsSet.write()
             self._store(outTsSet)
-
-    def closeOutputSetStep(self, attrib: Union[List[str], str]):
-        self._closeOutputSet()
-        attribList = [attrib] if type(attrib) is str else attrib
-        failedOutputList = []
-        for attr in attribList:
-            outTsSet = getattr(self, attr, None)
-            if not outTsSet or (outTsSet and len(outTsSet) == 0):
-                failedOutputList.append(attr)
-        if failedOutputList:
-            raise Exception(f'No output/s {failedOutputList} were generated. Please check the '
-                            f'Output Log > run.stdout and run.stderr')
-        closeStreamJournal(self)
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self) -> List[str]:
