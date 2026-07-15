@@ -1,3 +1,4 @@
+4.0.0: installation updated. Now a fat binary is compiled. Compatible with most of the gpu architectures.
 3.11.2:
  Users:
   - Correct fix in odd / even when only tomographic reconstruction is requested (Thanks Rory!).
