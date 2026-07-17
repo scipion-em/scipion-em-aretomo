@@ -27,6 +27,9 @@
 # **************************************************************************
 
 import os
+import tempfile
+from os.path import join
+
 import pwem
 import pyworkflow.utils as pwutils
 from aretomo.constants import ARETOMO_HOME, ARETOMO_CUDA_LIB, V1_1_3, DEFAULT_VERSION
@@ -75,14 +78,14 @@ class Plugin(pwem.Plugin):
         ARETOMO_INSTALLED = 'aretomo_installed'
         MAKEFILE11 = 'makefile11'
         aretomoHome = cls.getVar(ARETOMO_HOME)
-        fixedMakeFile = f'/tmp/{MAKEFILE11}'
-        cls.__createFatBinaryMakeFile(fixedMakeFile)
+        fixedMakeFile = cls.__createFatBinaryMakeFile()
         cmd = [
+            f'cd .. && rm -rf {aretomoHome} && '
             f'git clone https://github.com/czimaginginstitute/AreTomo2.git {aretomoHome} && '
             f'cd {aretomoHome} && '
             'git checkout main && '
             f'rm {MAKEFILE11} && '  # remove the original makefile
-            f'mv {fixedMakeFile} {aretomoHome} && '  # move the fixed makefile to the installation folder
+            f'mv {fixedMakeFile} {join(aretomoHome, MAKEFILE11)} && '  # move the fixed makefile to the installation folder
             f'make exe -f {MAKEFILE11} && '
             f'touch {ARETOMO_INSTALLED}'
         ]
@@ -99,7 +102,7 @@ class Plugin(pwem.Plugin):
                         default = True)
 
     @classmethod
-    def __createFatBinaryMakeFile(cls, makefilePath: str) -> None:
+    def __createFatBinaryMakeFile(cls) -> str:
         """
         Creates a fixed Makefile11 file that will replace during installation time
         the original AreTomo2 Makefile11 with an optimized version that includes
@@ -321,7 +324,9 @@ class Plugin(pwem.Plugin):
 
         # Write the file
         try:
-            with open(makefilePath, 'w') as f:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
                 f.write(contents)
+                makefilePath = f.name
+                return makefilePath
         except Exception as e:
-            raise Exception(f'Unable to write the file "{makefilePath}". Exception: {e}')
+            raise e
