@@ -339,7 +339,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
 
         while True:
             with self._lock:
-                listTSInput = inTsSet.getTSIds()
+                listTSInput = set(inTsSet.getTSIds())
 
             # In the if statement below, Counter is used because in the tsId comparison the order doesn’t matter
             # but duplicates do. With a direct comparison, the closing step may not be inserted because of the order:
@@ -352,8 +352,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                                          needsGPU=False)
                 break
 
-            tsToProcessDict = {ts.getTsId(): ts.clone() for ts in inTsSet.iterItems()
-                               if ts.getTsId() not in self.TS_read  # Only not processed tsIds
+            nonProcessedTsIds = listTSInput - set(self.TS_read)
+            tsToProcessDict = {tsId: ts.clone() for ts in inTsSet.iterItems()
+                               if (tsId := ts.getTsId()) in nonProcessedTsIds  # Only not processed tsIds
                                and ts.getSize() > 0}  # Avoid processing empty TS
             for tsId, ts in tsToProcessDict.items():
                     convertInput = self._insertFunctionStep(self.convertInputStep, ts,
