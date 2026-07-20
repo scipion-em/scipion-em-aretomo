@@ -66,8 +66,6 @@ class TestAreTomo2Base(TestBaseCentralizedLayer):
 
     @classmethod
     def setUpClass(cls):
-        print(blueStr('===> TESTS INFORMATION <==='
-                      '\nTests originally designed and passing with Aretomo2-1-1-3, Ubuntu 22.04, cuda-12.1'))
         setupTestProject(cls)
         cls.ds = DataSet.getDataSet(EMDB_10453)
         cls.expectedDimsTs = DataSetEmpiar10453.getTestTsDims(nImgs=cls.nAngles)
