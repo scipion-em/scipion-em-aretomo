@@ -43,7 +43,7 @@ from pyworkflow.object import Set, String, Pointer
 from pyworkflow.protocol import ProtStreamingBase
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
-from pwem.objects import Transform, CTFModel
+from pwem.objects import Transform, CTFModel, Image
 from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
@@ -332,6 +332,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         It should check its input and when ready conditions are met
         call the self._insertFunctionStep method.
         """
+
         closeSetStepDeps = []
         inTsSet = self._getSetOfTiltSeries()
         self.readingOutput()
@@ -357,23 +358,23 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                                if (tsId := ts.getTsId()) in nonProcessedTsIds  # Only not processed tsIds
                                and ts.getSize() > 0}  # Avoid processing empty TS
             for tsId, ts in tsToProcessDict.items():
-                    convertInput = self._insertFunctionStep(self.convertInputStep, ts,
-                                                            prerequisites=[],
-                                                            needsGPU=False)
-                    runAreTomo = self._insertFunctionStep(self.runAreTomoStep, ts,
-                                                          prerequisites=[convertInput],
-                                                          needsGPU=True)
-                    createOutputS = self._insertFunctionStep(self.createOutputStep, ts,
-                                                             prerequisites=[runAreTomo],
-                                                             needsGPU=False)
-                    closeSetStepDeps.append(createOutputS)
-                    logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
-                    self.TS_read.append(tsId)
+                convertInput = self._insertFunctionStep(self.convertInputStep, ts,
+                                                        prerequisites=[],
+                                                        needsGPU=False)
+                runAreTomo = self._insertFunctionStep(self.runAreTomoStep, ts,
+                                                      prerequisites=[convertInput],
+                                                      needsGPU=True)
+                createOutputS = self._insertFunctionStep(self.createOutputStep, ts,
+                                                         prerequisites=[runAreTomo],
+                                                         needsGPU=False)
+                closeSetStepDeps.append(createOutputS)
+                logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
+                self.TS_read.append(tsId)
 
             time.sleep(10)
             if inTsSet.isStreamOpen():
                 with self._lock:
-                    inTsSet.loadAllProperties() # refresh status for the streaming
+                    inTsSet.loadAllProperties()  # refresh status for the streaming
 
     # --------------------------- STEPS functions -----------------------------
     def convertInputStep(self, ts: TiltSeries):
@@ -388,7 +389,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             tmpPrefix = self._getTmpPath(tsId)
             pwutils.makePath(*[tmpPrefix, extraPrefix])
             outputTsFileName = self.getFilePath(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
-    
+
             if self.skipAlign:
                 if self.makeTomo:
                     createLink(tsFn, outputTsFileName)
@@ -402,25 +403,31 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                         createLink(inOddTsFn, outputTsFnOdd)
                         createLink(inEvenTsFn, outputTsFnEven)
             else:
-                if self.doEvenOdd.get():
-                    outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
-                    outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
-                    ts.applyTransformToAll(outputTsFileName,
-                                           outFileNamesEvenOdd=[outputTsFnEven, outputTsFnOdd])
-                else:
+                # Re-align
+                if self._getSetOfTiltSeries().hasAlignment():
+                    # Re-stack if necessary
                     ts.applyTransform(outputTsFileName)
-    
+
+                else:
+                    if self.doEvenOdd.get():
+                        outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                        outputTsFnOdd = self.getFilePathOdd(tsFn, tmpPrefix, tsId, ext=MRCS_EXT)
+                        ts.applyTransformToAll(outputTsFileName,
+                                               outFileNamesEvenOdd=[outputTsFnEven, outputTsFnOdd])
+                    else:
+                        ts.applyTransform(outputTsFileName)
+
                 # Generate angle file
                 angleFilePath = self.getFilePath(tsFn, tmpPrefix, tsId, ext=".tlt")
                 ts.generateTltFile(angleFilePath,
                                    presentAcqOrders=presentAcqOrders,
                                    includeDose=self.doDW.get())
-    
+
                 if self.alignZfile.hasValue():
                     alignZfile = self.alignZfile.get()
                     if os.path.exists(alignZfile):
                         self.perTsAlignZ = self.readThicknessFile(alignZfile)
-                        
+
         except Exception as e:
             self.failedItems.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
@@ -573,7 +580,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
 
                         # set Transform
                         m = alignmentMatrix[:, :, secIndex]
-                        transform.setMatrix(m)
+                        preAliMatrix = tiltImage.getTransform().getMatrix()  # Check for possible pre-alignment info
+                        resMatrix = np.matmul(m, preAliMatrix) if preAliMatrix is not None else m
+                        transform.setMatrix(resMatrix)
                     else:
                         newTi.setEnabled(False)
                         transform.setMatrix(np.identity(3))
@@ -714,10 +723,10 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
     def _warnings(self) -> List[str]:
         warnMsgs = []
         if self._getSetOfTiltSeries().hasAlignment() and not self.skipAlign:
-            warnMsgs.append("Input tilt-series already have alignment "
-                          "information. You probably want to skip the alignment step.")
+            warnMsgs.append("Input tilt-series has already alignment "
+                            "information. The tilt-series will be re-aligned considering "
+                            "the current alignment as the starting point.")
         return warnMsgs
-
 
     # --------------------------- UTILS functions -----------------------------
     def _genAretomoCmd(self,
@@ -730,7 +739,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         extraPrefix = self._getExtraPath(tsId)
         tmpPrefix = self._getTmpPath(tsId)
         align = 0
-        recTomo= True
+        recTomo = True
         estimateCtf = False
         if even is None:
             outFile = self.getFilePath(tsFn, extraPrefix, tsId, ext=MRC_EXT)
@@ -757,6 +766,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             '-AmpContrast': acq.getAmplitudeContrast(),
             '-Gpu': '%(GPU)s'
         }
+
         if self.doDW:
             args['-ImgDose'] = acq.getDosePerFrame()
 
@@ -812,7 +822,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         else:
             self.__readingOutPutTsSet()
 
-
     def __readingOutPutTomos(self) -> None:
         outTomoSet = getattr(self, OUT_TOMO, None)
         if outTomoSet:
@@ -830,7 +839,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             logger.info(cyanStr(f'TsIds processed: {self.TS_read}'))
         else:
             logger.info(cyanStr('No tilt-series have been processed yet'))
-
 
     @staticmethod
     def readThicknessFile(filePath: os.PathLike):
@@ -924,7 +932,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             self._defineSourceRelation(inTsPointer, outputCtfs)
         return outputCtfs
 
-    def _getSetOfTiltSeries(self, isPointer: bool=False) -> Union[Pointer, SetOfTiltSeries]:
+    def _getSetOfTiltSeries(self, isPointer: bool = False) -> Union[Pointer, SetOfTiltSeries]:
         if isPointer:
             return self.inputSetOfTiltSeries
         else:
@@ -966,7 +974,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                 return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
         else:
             return tsSet.getItem(TiltSeries.TS_ID_FIELD, tsId)
-
 
     def getAlnFile(self, tsFn: str, tsId: str):
         return self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=".aln")
