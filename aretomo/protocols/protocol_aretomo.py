@@ -620,7 +620,34 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                                     f'exception {e}. Skipping... '))
                 logger.error(traceback.format_exc())
 
-    @retry_on_sqlite_lock(log=logger)
+    @staticmethod
+    def _rollbackSet(outSet, tsId: str) -> None:
+        """Release the write lock on a SINGLE output set after a SQLite lock
+        error so the @retry_on_sqlite_lock retry is a clean, non-hogging redo
+        (the producer does not hold the write transaction across the backoff
+        window, which would starve the concurrent readers it is waiting for
+        under journal_mode=DELETE), and reset any cached-tsId guard so the retry
+        does not trip a duplicate-tsId check. Never raises -- it runs inside an
+        except handler.
+        """
+        try:
+            if hasattr(outSet, 'rollbackFailedAppend'):
+                # SetOfTiltSeries: rollback the transaction AND drop the cached
+                # tsId in one call.
+                outSet.rollbackFailedAppend(tsId)
+                return
+            # SetOfCTFTomoSeries caches tsIds (_ctfTsIds) behind a duplicate
+            # guard but has no rollback helper; drop the tsId so the retry
+            # re-appends cleanly. SetOfTomograms has no such cache/guard.
+            ctfCache = getattr(outSet, '_ctfTsIds', None)
+            if ctfCache is not None:
+                ctfCache.discard(tsId)
+            conn = outSet._getMapper().db.connection
+            if conn.in_transaction:
+                conn.rollback()
+        except Exception as e:
+            logger.error(yellowStr(f'Could not roll back write lock for {tsId}: {e}'))
+
     def _registerOutputs(self,
                          tsId: str,
                          badReconstruction: bool,
@@ -632,55 +659,110 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                          tomoFileName: str,
                          newCTFTomoSeries: Optional[CTFTomoSeries],
                          ctfTomos: List[CTFTomo]) -> bool:
+        """Persist the tomogram / tilt-series / CTF outputs of a tilt-series.
+
+        Each output set lives in its OWN SQLite file and is registered by an
+        INDEPENDENTLY retried helper (see below). Decoupling them on the retry
+        path is the point: under journal_mode=DELETE a 'database is locked' can
+        hit any single commit, and re-running the whole three-set sequence would
+        re-append (and duplicate/corrupt) a sibling set that already committed.
+        With per-set helpers, a lock on set N only retries set N; the sets that
+        already committed are never touched again.
+
+        Returns False only when nothing was registered (bad reconstruction).
+        """
+        if self.makeTomo:
+            if badReconstruction:
+                self._registerBadReconstruction(tsId, tomoFileName)
+                # Nothing registered for this tsId -> no sidecar/journal.
+                return False
+            self._registerTomogramOutput(newTomogram)
+        else:
+            pwutils.cleanPath(self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=MRC_EXT))
+
+        if not (self.makeTomo and self.skipAlign):
+            self._registerTiltSeriesOutput(newTs, tiltImages, aretomoAln)
+            if self.doEstimateCtf:
+                self._registerCtfOutput(newCTFTomoSeries, ctfTomos)
+
+        return True
+
+    def _registerBadReconstruction(self, tsId: str, tomoFileName: str) -> None:
+        """Record (once) that a tilt-series was skipped due to a bad
+        reconstruction and persist the message. The message is composed a single
+        time here (so a retried persist cannot append it twice)."""
+        msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(self._getOutputDim(tomoFileName)))
+        self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
+        prev = self.badTomoRecMsg.get()
+        self.badTomoRecMsg.set((prev + '\n' + msg) if prev else '\n' + msg)
+        self._persistBadTomoRecMsg()
+
+    # Each of the following persists ONE output set. They compete with concurrent
+    # readers of that same set's SQLite (journal_mode=DELETE => one writer vs many
+    # readers, e.g. a chained downstream consumer), so each gets a more patient
+    # retry budget than the default and, on a lock, releases its write lock +
+    # resets its in-memory append state (via _rollbackSet) so the retry is a
+    # clean, non-hogging redo that never trips a duplicate-tsId guard.
+    @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
+                          backoff_factor=1.5, max_delay=15)
+    def _persistBadTomoRecMsg(self) -> None:
         with self._lock:
-            if self.makeTomo:
-                if badReconstruction:
-                    msg = 'tsId = %s. Generated tomogram dims = %s' % (tsId, str(self._getOutputDim(
-                        tomoFileName)))
-                    self.warning('Tilt series skipped because of a bad reconstruction. ' + msg)
-                    outMsg = self.badTomoRecMsg.get() + '\n' + msg if self.badTomoRecMsg.get() else '\n' + msg
-                    self.badTomoRecMsg.set(outMsg)
-                    self._store(self.badTomoRecMsg)
-                    # Nothing registered for this tsId -> no sidecar/journal.
-                    return False
-                outputSetOfTomograms = self.getOutputSetOfTomograms()
-                outputSetOfTomograms.append(newTomogram)
-                outputSetOfTomograms.update(newTomogram)
-                outputSetOfTomograms.write()
-                self._store(outputSetOfTomograms)
-            else:
-                pwutils.cleanPath(self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=MRC_EXT))
+            self._store(self.badTomoRecMsg)
 
-            if not (self.makeTomo and self.skipAlign):
-                outputSetOfTiltSeries = self.getOutputSetOfTiltSeries(OUT_TS)
-                outputSetOfTiltSeries.append(newTs)
+    @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
+                          backoff_factor=1.5, max_delay=15)
+    def _registerTomogramOutput(self, newTomogram: Tomogram) -> None:
+        with self._lock:
+            outSet = self.getOutputSetOfTomograms()
+            try:
+                outSet.append(newTomogram)
+                outSet.update(newTomogram)
+                outSet.write()
+                self._store(outSet)
+            except sqlite3.OperationalError as e:
+                self._rollbackSet(outSet, newTomogram.getTsId())
+                raise e
 
+    @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
+                          backoff_factor=1.5, max_delay=15)
+    def _registerTiltSeriesOutput(self,
+                                  newTs: TiltSeries,
+                                  tiltImages: List[TiltImage],
+                                  aretomoAln: Type[AretomoAln]) -> None:
+        with self._lock:
+            outSet = self.getOutputSetOfTiltSeries(OUT_TS)
+            try:
+                outSet.append(newTs)
                 for newTi in tiltImages:
                     newTs.append(newTi)
-
                 acq = newTs.getAcquisition()
                 acq.setTiltAxisAngle(aretomoAln.tilt_axes[0])
                 newTs.setAcquisition(acq)
-
-                # newTs.setDim(inputDim)
                 newTs.write(properties=False)
+                outSet.update(newTs)
+                outSet.write()
+                self._store(outSet)
+            except sqlite3.OperationalError as e:
+                self._rollbackSet(outSet, newTs.getTsId())
+                raise e
 
-                outputSetOfTiltSeries.update(newTs)
-                outputSetOfTiltSeries.write()
-                self._store(outputSetOfTiltSeries)
-
-                if self.doEstimateCtf:
-                    outputCtfs = self.getOutputSetOfCtfs()
-                    outputCtfs.append(newCTFTomoSeries)
-
-                    for newCtfTomo in ctfTomos:
-                        newCTFTomoSeries.append(newCtfTomo)
-
-                    outputCtfs.update(newCTFTomoSeries)
-                    outputCtfs.write()
-                    self._store(outputCtfs)
-
-        return True
+    @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
+                          backoff_factor=1.5, max_delay=15)
+    def _registerCtfOutput(self,
+                           newCTFTomoSeries: CTFTomoSeries,
+                           ctfTomos: List[CTFTomo]) -> None:
+        with self._lock:
+            outSet = self.getOutputSetOfCtfs()
+            try:
+                outSet.append(newCTFTomoSeries)
+                for newCtfTomo in ctfTomos:
+                    newCTFTomoSeries.append(newCtfTomo)
+                outSet.update(newCTFTomoSeries)
+                outSet.write()
+                self._store(outSet)
+            except sqlite3.OperationalError as e:
+                self._rollbackSet(outSet, newCTFTomoSeries.getTsId())
+                raise e
 
     def createOutputFailedTs(self, ts: TiltSeries):
         tsId = ts.getTsId()
@@ -695,19 +777,27 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                                     f'exception {e}. Skipping... '))
                 logger.error(traceback.format_exc())
 
-    @retry_on_sqlite_lock(log=logger)
+    @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
+                          backoff_factor=1.5, max_delay=15)
     def registerFailedOutput(self, ts: TiltSeries):
         with self._lock:
             inTsSet = self._getSetOfTiltSeries()
             outTsSet = self.getOutputFailedSetOfTiltSeries(inTsSet)
             newTs = TiltSeries()
             newTs.copyInfo(ts)
-            outTsSet.append(newTs)
-            newTs.copyItems(ts)
-            newTs.write()
-            outTsSet.update(newTs)
-            outTsSet.write()
-            self._store(outTsSet)
+            try:
+                outTsSet.append(newTs)
+                newTs.copyItems(ts)
+                newTs.write()
+                outTsSet.update(newTs)
+                outTsSet.write()
+                self._store(outTsSet)
+            except sqlite3.OperationalError as e:
+                # Release the write lock and reset the in-memory append state so
+                # the retry is a clean, non-hogging redo and never trips the
+                # duplicate-tsId guard.
+                outTsSet.rollbackFailedAppend(newTs.getTsId())
+                raise e
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self) -> List[str]:
