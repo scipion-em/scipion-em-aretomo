@@ -46,8 +46,8 @@ from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 from tomo.protocols.protocol_base_streaming_tomo import ProtocolBaseStreamingTomo
-from tomo.utils import sleepRandomly, writeTsSidecar, writeCtfSidecar
-from pwem import genExecStatusDir, getExecStatusDir, appendStreamItem
+from tomo.utils import writeTsSidecar, writeCtfSidecar
+from pwem import getExecStatusDir, appendStreamItem
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
 from ..convert.dataimport import AretomoCtfParser
@@ -333,47 +333,19 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
         else:
             self._insertNonStreamingSteps()
 
-    def stepsGeneratorStep(self) -> None:
-        """
-        This step should be implemented by any streaming protocol.
-        It should check its input and when ready conditions are met
-        call the self._insertFunctionStep method.
-        """
-        closeSetStepDeps = []
-        inTsSet = self._getSetOfTiltSeries()
-        genExecStatusDir(self)
-        self.readingOutput()
-        outputsToCheck = self._getOutputsToCheck()
+    # stepsGeneratorStep is centralized in ProtocolBaseStreamingTomo; the hooks
+    # below provide AreTomo's input set, tracking list and (multi-)output names.
+    def _getStreamingInputTs(self):
+        return self._getSetOfTiltSeries()
 
-        while True:
-            try:
-                # Discover ready tsIds from the producer's append-only journal
-                # (filesystem), not from its live SQLite set.
-                inTsIds = set(inTsSet.getTSIds())
-                if self._stopGeneratingSteps(inTsSet,
-                                             inTsIds=inTsIds,
-                                             tsIdReadList=self.TS_read,
-                                             outputNames=outputsToCheck,
-                                             closeSetStepDeps=closeSetStepDeps):
-                    break
+    def _getProcessedTsIds(self) -> List[str]:
+        return self.TS_read
 
-                nonProcessedTsIds = inTsIds - set(self.TS_read)
-                if nonProcessedTsIds:
-                    # Rebuild each new tilt-series in memory from the producer's JSON
-                    # sidecar (no producer-DB read).
-                    tsToProcessDict = inTsSet.fetchNewTs(nonProcessedTsIds)
-                    for tsId, ts in tsToProcessDict.items():
-                        self._insertCommonSteps(ts, closeSetStepDeps)
-                        logger.info(cyanStr(f"Steps created for TS_ID: {tsId}"))
-                        self.TS_read.append(tsId)
-
-                sleepRandomly()
-
-            except Exception as e:
-                logger.error(yellowStr(f'stepsGeneratorStep failed with exception: {e}.'))
-                logger.error(traceback.format_exc())
-                sleepRandomly()
-                continue
+    def _getStreamingOutputNames(self) -> List[str]:
+        # Ordered so the first is the representative "one output per processed
+        # tsId" (OUT_TS when aligning, OUT_TOMO when skipAlign) -> the base
+        # _getReadingOutputName picks it for _streamingReadingOutput.
+        return self._getOutputsToCheck()
 
     def _insertNonStreamingSteps(self):
         closeSetStepDeps = []
@@ -941,30 +913,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
         param = ' '.join([f'{k} {str(v)}' for k, v in args.items()])
         param += ' ' + self.extraParams.get()
         return param
-
-    def readingOutput(self) -> None:
-        if self.skipAlign.get():
-            self.__readingOutPutTomos()
-        else:
-            self.__readingOutPutTsSet()
-
-    def __readingOutPutTomos(self) -> None:
-        outTomoSet = getattr(self, OUT_TOMO, None)
-        if outTomoSet:
-            for ts in outTomoSet:
-                self.TS_read.append(ts.getTsId())
-            logger.info(cyanStr(f'TsIds processed: {self.TS_read}'))
-        else:
-            logger.info(cyanStr('No tilt-series have been processed yet'))
-
-    def __readingOutPutTsSet(self) -> None:
-        outTsSet = getattr(self, OUT_TS, None)
-        if outTsSet:
-            for ts in outTsSet:
-                self.TS_read.append(ts.getTsId())
-            logger.info(cyanStr(f'TsIds processed: {self.TS_read}'))
-        else:
-            logger.info(cyanStr('No tilt-series have been processed yet'))
 
     @staticmethod
     def readThicknessFile(filePath: os.PathLike):
