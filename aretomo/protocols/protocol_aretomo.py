@@ -68,7 +68,176 @@ MRCS_EXT = '.mrcs'
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
-    """ Protocol for fiducial-free alignment and reconstruction for tomography available in streaming. """
+    """
+    Provides streaming fiducial-free alignment and tomographic reconstruction for cryo-electron tomography tilt-series. It is intended for workflows in which new tilt-series may appear progressively during acquisition or import, allowing alignment, reconstruction, and associated metadata generation to proceed continuously rather than only after the full dataset has been collected.
+
+    AI Generated:
+
+    Tilt-Series Align and Reconstruct (ProtAreTomoAlignRecon) — User Manual
+
+        Overview
+
+        This protocol is designed to process electron tomography tilt-series using the AreTomo framework in a
+        streaming environment. Its main purpose is to transform raw or pre-aligned tilt-series into biologically
+        interpretable outputs that can include aligned tilt-series, reconstructed tomograms, and contrast transfer
+        function estimations. Because processing can begin while acquisition is still ongoing, the protocol is
+        particularly useful in automated pipelines, facility environments, and high-throughput screening workflows
+        where rapid feedback is important.
+
+        From a biological perspective, the protocol addresses one of the central steps of cryo-electron tomography:
+        recovering a coherent three-dimensional representation of the specimen from a set of tilted projections.
+        Accurate alignment is essential because even small angular or translational inconsistencies propagate into
+        reconstruction artifacts that may obscure structural interpretation.
+
+        Streaming-Oriented Processing
+
+        A major strength of this protocol is its streaming behavior. Instead of waiting for a complete collection of
+        tilt-series, each newly available tilt-series can be processed independently as soon as it becomes ready.
+        This allows users to evaluate data quality, alignment stability, and reconstruction performance while data
+        acquisition is still active.
+
+        In practical biological applications, this means that problematic acquisitions, unstable microscope behavior,
+        or unsuitable specimen regions can often be detected early enough to influence ongoing experimental decisions.
+
+        Input Data and General Usage
+
+        The required input is a set of tilt-series. These may either be raw tilt-series that still require alignment
+        or already aligned tilt-series that only need tomographic reconstruction.
+
+        A common use case is standard fiducial-free alignment followed by tomogram reconstruction. This is the
+        recommended workflow for most routine cryo-ET experiments where gold fiducials are absent or intentionally
+        avoided. Another common situation is reconstruction from previously aligned tilt-series, for example when
+        alignment was performed elsewhere or when users wish to compare reconstruction strategies without repeating
+        alignment.
+
+        The protocol can also reconstruct odd and even half tomograms. This is particularly relevant in downstream
+        subtomogram averaging workflows, where half-map separation can support resolution estimation and validation.
+
+        Alignment Strategy and Biological Interpretation
+
+        During alignment, the protocol uses projection-matching principles to determine the geometric consistency of
+        the tilt-series. The alignment volume height is an especially important parameter because it should reflect
+        the approximate thickness of the biological specimen rather than the full tomogram thickness.
+
+        From a practical standpoint, this parameter should usually be chosen to approximate the region containing
+        actual biological material. If it is too small, alignment may become unstable because relevant structural
+        information is excluded. If it is too large, the procedure may become less robust due to excessive inclusion
+        of noise or empty solvent regions.
+
+        The protocol also supports per-tilt-series alignment thickness values. This is particularly useful in
+        heterogeneous datasets where ice thickness or specimen geometry varies significantly between positions.
+
+        Tilt Geometry Refinement
+
+        The protocol allows refinement of tilt angles and tilt-axis orientation. These options can improve alignment
+        quality when acquisition metadata are slightly inaccurate, which is not uncommon in real experimental
+        conditions.
+
+        For biological interpretation, these corrections can have visible effects on the orientation of the missing
+        wedge. This becomes especially important when comparing tomograms across datasets or when performing
+        subtomogram averaging, because apparently subtle angular corrections may translate into meaningful
+        differences in anisotropic resolution.
+
+        Because automatic refinement may occasionally produce unreliable measurements, users should evaluate these
+        options carefully when working with noisy data or specimens with limited contrast.
+
+        Tomogram Reconstruction
+
+        The protocol supports tomogram reconstruction after alignment using either weighted back projection or
+        simultaneous algebraic reconstruction.
+
+        Weighted back projection is usually the most direct and computationally efficient option. It is well suited
+        for rapid visualization, quality control, and many exploratory analyses.
+
+        Simultaneous algebraic reconstruction generally provides a more iterative refinement of the volume and may
+        produce improved contrast or feature recovery in challenging datasets. However, it is more computationally
+        demanding and should usually be preferred when tomograms are intended for careful structural inspection or
+        downstream quantitative analysis.
+
+        The reconstructed thickness defines the axial size of the tomogram in unbinned coordinates. This parameter
+        should be selected according to specimen thickness rather than simply maximizing the output volume.
+
+        CTF Estimation and Phase Information
+
+        The protocol can estimate CTF parameters during processing. For biological users, this adds valuable optical
+        information that may later support subtomogram analysis, defocus assessment, and data-quality inspection.
+
+        Optional phase-shift estimation is particularly relevant for datasets collected with phase plates or when
+        phase behavior is expected to deviate from standard assumptions. In many conventional workflows, however,
+        default CTF estimation is often sufficient.
+
+        Local Motion Correction and Focused Alignment
+
+        Local motion correction is supported through either isolated regions of interest or distributed patch-based
+        strategies. This functionality becomes particularly useful when beam-induced motion or non-uniform specimen
+        behavior affects alignment quality across the field of view.
+
+        In addition, the protocol allows focused alignment using a selected region of interest. This can be highly
+        beneficial when the biologically relevant structure lies far from the tilt axis or occupies only a limited
+        region of the projection images.
+
+        From a biological perspective, focused alignment is often advantageous for cellular tomography, lamellae,
+        or sparsely distributed targets where the global field may contain large irrelevant areas.
+
+        Dose Weighting and Output Compatibility
+
+        Dose weighting can be enabled to better account for radiation damage across the tilt-series. This is
+        especially relevant when preserving high-resolution information is important.
+
+        The protocol can also generate outputs compatible with downstream software environments such as Relion,
+        Warp, or locally aligned stacks. These outputs are particularly useful when the tomograms are part of larger
+        multi-software processing pipelines.
+
+        Output Products
+
+        Depending on the selected workflow, the protocol can generate aligned tilt-series, reconstructed tomograms,
+        and CTF series.
+
+        The aligned tilt-series preserve the identity of the original projections but place them into a coherent
+        geometric frame suitable for further processing.
+
+        The tomograms represent the main three-dimensional biological product. These volumes can be used for visual
+        inspection, particle picking, subtomogram extraction, segmentation, or structural interpretation.
+
+        When odd and even reconstructions are enabled, paired half maps are also produced for downstream validation.
+
+        Quality Control and Failure Handling
+
+        The protocol includes safeguards to detect problematic reconstructions or unstable outputs. In practice,
+        certain computational or hardware combinations may occasionally generate geometrically inconsistent volumes.
+        Such problematic results are excluded from normal output registration.
+
+        This behavior is important biologically because it reduces the risk of propagating clearly invalid
+        reconstructions into later interpretation steps.
+
+        Failed tilt-series can be collected separately, allowing users to review them independently rather than
+        interrupting the entire streaming workflow.
+
+        Practical Recommendations
+
+        For most cryo-electron tomography experiments, a good starting strategy is standard alignment with default
+        refinement settings, followed by weighted back projection reconstruction.
+
+        When the specimen thickness varies significantly across acquisition positions, per-tilt-series alignment
+        thickness values often improve robustness.
+
+        For cellular samples, lamellae, or spatially localized targets, focused alignment or local motion
+        correction frequently provides substantial improvement.
+
+        When preparing data for subtomogram averaging or more demanding structural interpretation, reconstructing
+        odd and even tomograms and enabling CTF estimation is generally advisable.
+
+        Final Perspective
+
+        In practical cryo-ET workflows, this protocol serves not only as a reconstruction tool but as an early
+        structural decision point. The quality of alignment, the biological appropriateness of the reconstruction
+        geometry, and the consistency of tilt refinement can all strongly influence downstream interpretation.
+
+        For most users, the most reliable outcomes come from selecting parameters that reflect the actual specimen
+        geometry rather than purely computational convenience. Thoughtful control of alignment thickness,
+        reconstruction depth, and focused alignment regions is often more important biologically than aggressive
+        optimization of every advanced setting.
+    """
     _label = 'tilt-series align and reconstruct'
     _devStatus = PROD
     _possibleOutputs = {OUT_TS: SetOfTiltSeries,
