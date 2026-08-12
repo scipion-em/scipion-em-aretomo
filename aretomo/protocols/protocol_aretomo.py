@@ -76,7 +76,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
-        self.TS_read = []
         self.badTsAliMsg = String()
         self.badTomoRecMsg = String()
         self.excludedViewsMsg = String()
@@ -336,9 +335,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
     # Streaming Hooks ############################
     def _getStreamingInputSets(self):
         return [self._getSetOfTiltSeries()]
-
-    def _getProcessedTsIds(self) -> List[str]:
-        return self.TS_read
 
     def _getStreamingOutputNames(self) -> List[str]:
         # Ordered so the first is the representative "one output per processed
