@@ -335,7 +335,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
 
     # Streaming Hooks ############################
     def _getStreamingInputSets(self):
-        return self._getSetOfTiltSeries()
+        return [self._getSetOfTiltSeries()]
 
     def _getProcessedTsIds(self) -> List[str]:
         return self.TS_read
