@@ -333,9 +333,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
         else:
             self._insertNonStreamingSteps()
 
-    # stepsGeneratorStep is centralized in ProtocolBaseStreamingTomo; the hooks
-    # below provide AreTomo's input set, tracking list and (multi-)output names.
-    def _getStreamingInputTs(self):
+    # Streaming Hooks ############################
+    def _getStreamingInputSets(self):
         return self._getSetOfTiltSeries()
 
     def _getProcessedTsIds(self) -> List[str]:
@@ -346,6 +345,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
         # tsId" (OUT_TS when aligning, OUT_TOMO when skipAlign) -> the base
         # _getReadingOutputName picks it for _streamingReadingOutput.
         return self._getOutputsToCheck()
+
+    # End of streaming hooks #####################
 
     def _insertNonStreamingSteps(self):
         closeSetStepDeps = []
