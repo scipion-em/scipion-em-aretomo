@@ -41,7 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
-from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr, yellowStr
+from pyworkflow.utils import Message, cyanStr, getExt, createLink, redStr
 from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
@@ -589,34 +589,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                                     f'exception {e}. Skipping... '))
                 logger.error(traceback.format_exc())
 
-    @staticmethod
-    def _rollbackSet(outSet, tsId: str) -> None:
-        """Release the write lock on a SINGLE output set after a SQLite lock
-        error so the @retry_on_sqlite_lock retry is a clean, non-hogging redo
-        (the producer does not hold the write transaction across the backoff
-        window, which would starve the concurrent readers it is waiting for
-        under journal_mode=DELETE), and reset any cached-tsId guard so the retry
-        does not trip a duplicate-tsId check. Never raises -- it runs inside an
-        except handler.
-        """
-        try:
-            if hasattr(outSet, 'rollbackFailedAppend'):
-                # SetOfTiltSeries: rollback the transaction AND drop the cached
-                # tsId in one call.
-                outSet.rollbackFailedAppend(tsId)
-                return
-            # SetOfCTFTomoSeries caches tsIds (_ctfTsIds) behind a duplicate
-            # guard but has no rollback helper; drop the tsId so the retry
-            # re-appends cleanly. SetOfTomograms has no such cache/guard.
-            ctfCache = getattr(outSet, '_ctfTsIds', None)
-            if ctfCache is not None:
-                ctfCache.discard(tsId)
-            conn = outSet._getMapper().db.connection
-            if conn.in_transaction:
-                conn.rollback()
-        except Exception as e:
-            logger.error(yellowStr(f'Could not roll back write lock for {tsId}: {e}'))
-
     def _registerOutputs(self,
                          tsId: str,
                          badReconstruction: bool,
@@ -670,7 +642,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
     # readers of that same set's SQLite (journal_mode=DELETE => one writer vs many
     # readers, e.g. a chained downstream consumer), so each gets a more patient
     # retry budget than the default and, on a lock, releases its write lock +
-    # resets its in-memory append state (via _rollbackSet) so the retry is a
+    # resets its in-memory append state (via _releaseOutputWriteLock) so the retry is a
     # clean, non-hogging redo that never trips a duplicate-tsId guard.
     @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
                           backoff_factor=1.5, max_delay=15)
@@ -689,7 +661,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                 outSet.write()
                 self._store(outSet)
             except sqlite3.OperationalError as e:
-                self._rollbackSet(outSet, newTomogram.getTsId())
+                self._releaseOutputWriteLock(outSet, newTomogram.getTsId())
                 raise e
 
     @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
@@ -712,7 +684,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                 outSet.write()
                 self._store(outSet)
             except sqlite3.OperationalError as e:
-                self._rollbackSet(outSet, newTs.getTsId())
+                self._releaseOutputWriteLock(outSet, newTs.getTsId())
                 raise e
 
     @retry_on_sqlite_lock(log=logger, max_attempts=30, initial_delay=0.5,
@@ -730,7 +702,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                 outSet.write()
                 self._store(outSet)
             except sqlite3.OperationalError as e:
-                self._rollbackSet(outSet, newCTFTomoSeries.getTsId())
+                self._releaseOutputWriteLock(outSet, newCTFTomoSeries.getTsId())
                 raise e
 
     def createOutputFailedTs(self, ts: TiltSeries):
@@ -765,7 +737,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                 # Release the write lock and reset the in-memory append state so
                 # the retry is a clean, non-hogging redo and never trips the
                 # duplicate-tsId guard.
-                outTsSet.rollbackFailedAppend(newTs.getTsId())
+                self._releaseOutputWriteLock(outTsSet, newTs.getTsId())
                 raise e
 
     # --------------------------- INFO functions ------------------------------
