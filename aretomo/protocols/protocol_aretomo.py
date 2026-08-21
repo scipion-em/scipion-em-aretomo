@@ -467,7 +467,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
             tsId = ts.getTsId()
             logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
             aretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
-            indexDict = self._getIndexAssignDict(ts)
+            # Load the input tilt-images once and reuse them for every step below
+            # (index-assignment dict, tilt-image loop and CTF loop). In non-streaming
+            # mode this collapses what used to be up to 3 SQLite SELECTs on the input
+            # set into a single read; in streaming mode it avoids re-cloning the
+            # in-memory sidecar list 3 times.
+            tiList = ts.loadTiltImgsInMemory()
+            tiList.sort(key=lambda item: item.getIndex())
+            indexDict = self._getIndexAssignDict(tiList)
             finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
             for newInd, origInd in indexDict.items():
                 secNum = newInd - 1  # Indices begin in 1, sects in 0
@@ -510,8 +517,6 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                 newTs.copyInfo(ts)
                 newTs.setSamplingRate(inputSampling)
                 newTs.setAlignment2D()
-                tiList = ts.loadTiltImgsInMemory()
-                tiList.sort(key=lambda item: item.getIndex())
 
                 for i, tiltImage in enumerate(tiList):
                     newTi = tiltImage.clone()
@@ -545,7 +550,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                     newCTFTomoSeries.setTiltSeries(newTs)
                     newCTFTomoSeries.setTsId(tsId)
 
-                    for i, tiltImage in enumerate(ts.loadTiltImgsInMemory()):
+                    for i, tiltImage in enumerate(tiList):
                         ctf = CTFModel()
                         ind = i + 1
                         if ind in finalInds:
@@ -1022,16 +1027,20 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
         return self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=".aln")
 
     @staticmethod
-    def _getIndexAssignDict(ts: TiltSeries) -> dict:
+    def _getIndexAssignDict(tiList: List[TiltImage]) -> dict:
         """It generates a dictionary of {key: value} = {indInRestackedTs: indInOriginalTs} that will
         be used to get the excluded views after the re-stacking process in case there are excluded views in
         the input tilt-series (so they are re-stacked in the convert input step) and the automatically excluded
         views because of the dark tolerance threshold of AreTomo, that are excluded considering the indices of
         the re-stacked tilt-series, but the output non-interpolated tilt-series must be referred to the
-        input tilt-series."""
+        input tilt-series.
+
+        :param tiList: the tilt-series' TiltImages already loaded in memory (sorted
+            by index). Passed in by the caller so the tilt-images are read once per
+            output generation instead of re-querying the DB on every use."""
         indexDict = {}
         newInd = 1
-        for ti in ts.loadTiltImgsInMemory():
+        for ti in tiList:
             if ti.isEnabled():
                 indexDict[newInd] = ti.getIndex()
                 newInd += 1
