@@ -46,7 +46,7 @@ from pyworkflow.utils.retry_streaming import retry_on_sqlite_lock
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 from tomo.protocols.protocol_base_streaming_tomo import ProtocolBaseStreamingTomo
-from tomo.utils import writeTsSidecar, writeCtfSidecar
+from tomo.utils import writeTsSidecar, writeCtfSidecar, writeTomoSidecar
 from pwem import getExecStatusDir, appendStreamItem
 from .. import Plugin
 from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
@@ -184,10 +184,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                       display=params.EnumParam.DISPLAY_COMBO,
                       condition=doAlignTs,
                       expertLevel=params.LEVEL_ADVANCED,
-                      choices=['No', 'Relion 4', 'Warp', 'Save locally aligned TS'],
+                      choices=['No', 'for Relion', 'for Warp', 'Save locally aligned TS'],
                       default=0,
                       label="Generate extra IMOD output?",
-                      help="0 - No\n1 - generate IMOD files for Relion 4\n"
+                      help="0 - No\n"
+                           "1 - generate IMOD files for Relion 4\n"
                            "2 - generate IMOD files for Warp\n"
                            "3 - generate global and local-aligned tilt series stack. "
                            "High frequencies are enhanced to alleviate the attenuation "
@@ -461,9 +462,9 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
         if tsId in self.failedItems:
             self.createOutputFailedTs(ts)
         else:
-            self.createOutputTs(ts, firstItem.getFileName())
+            self.createOutputs(ts, firstItem.getFileName())
 
-    def createOutputTs(self, ts: TiltSeries, tsFn: str):
+    def createOutputs(self, ts: TiltSeries, tsFn: str):
         try:
             tsId = ts.getTsId()
             logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
@@ -585,6 +586,8 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtocolBaseStreamingTomo):
                     writeTsSidecar(statusDir, newTs, tiltImages)
                 if newCTFTomoSeries is not None and ctfTomos:
                     writeCtfSidecar(statusDir, newCTFTomoSeries, ctfTomos)
+                if newTomogram is not None:
+                    writeTomoSidecar(statusDir, newTomogram)
                 appendStreamItem(self, tsId)
 
         except Exception as e:
