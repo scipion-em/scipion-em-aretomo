@@ -51,7 +51,7 @@ from tomo.objects import (Tomogram, TiltSeries, TiltImage,
                           SetOfTomograms, SetOfTiltSeries, SetOfCTFTomoSeries, CTFTomoSeries, CTFTomo)
 
 from .. import Plugin
-from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln
+from ..convert.convert import getTransformationMatrix, readAlnFile, writeAlnFile, AretomoAln, convertAlnToXf
 from ..convert.dataimport import AretomoCtfParser
 from ..constants import RECON_SART, LOCAL_MOTION_COORDS, LOCAL_MOTION_PATCHES
 
@@ -65,6 +65,12 @@ EVEN = '_even'
 ODD = '_odd'
 MRC_EXT = '.mrc'
 MRCS_EXT = '.mrcs'
+
+# OutImod choices
+DO_NOT_GENERATE = 0
+GEN_FOR_RELION = 1
+GEN_FOR_WARP = 2
+SAVE_LOCAL_ALI = 3
 
 
 class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
@@ -187,10 +193,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
                       display=params.EnumParam.DISPLAY_COMBO,
                       condition=doAlignTs,
                       expertLevel=params.LEVEL_ADVANCED,
-                      choices=['No', 'Relion 4', 'Warp', 'Save locally aligned TS'],
-                      default=0,
+                      choices=['No', 'for Relion', 'for Warp', 'Save locally aligned TS'],
+                      default=DO_NOT_GENERATE,
                       label="Generate extra IMOD output?",
-                      help="0 - No\n1 - generate IMOD files for Relion 4\n"
+                      help="0 - No\n"
+                           "1 - generate IMOD files for Relion\n"
                            "2 - generate IMOD files for Warp\n"
                            "3 - generate global and local-aligned tilt series stack. "
                            "High frequencies are enhanced to alleviate the attenuation "
@@ -476,7 +483,14 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
             logger.info(cyanStr(f'------- createOutputStep ts_id: {tsId}'))
             firstItem = ts.getFirstEnabledItem()
             tsFn = firstItem.getFileName()
-            aretomoAln = readAlnFile(self.getAlnFile(tsFn, tsId))
+            alnFn = self.getAlnFile(tsFn, tsId)
+
+            # Create IMOD's xf file for Relion if requested
+            if self.outImod.get() == GEN_FOR_RELION:
+                xfFn = self.getFilePath(tsFn, self._getExtraPath(tsId), tsId, ext=".xf")
+                convertAlnToXf(alnFn, xfFn)
+
+            aretomoAln = readAlnFile(alnFn)
             indexDict = self._getIndexAssignDict(ts)
             finalIndsAliDict = {}  # {indexInOrigTs: matching line index in aln (AretomoAln.sections.index(secNum))}
             for newInd, origInd in indexDict.items():
@@ -705,7 +719,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         if self.skipAlign and not self.makeTomo:
             errors.append("You cannot switch off both alignment and reconstruction.")
 
-        if self.outImod.get() != 0 and not self.doDW:
+        if self.outImod.get() != DO_NOT_GENERATE and not self.doDW:
             errors.append("Dose weighting needs to be enabled when "
                           "saving extra IMOD output.")
 
@@ -745,7 +759,7 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         args = {
             '-InMrc': tsFn,
             '-OutMrc': outFile,
-            '-OutImod': self.outImod.get(),
+            '-OutImod': self._getOutImodChoice(),
             '-Align': align,
             '-VolZ': self.tomoThickness if recTomo else 0,
             '-OutBin': self.binFactor,
@@ -996,3 +1010,11 @@ class ProtAreTomoAlignRecon(EMProtocol, ProtStreamingBase):
         if self.doEstimateCtf.get() and not self.skipAlign.get():
             outputsToCheck.append(OUT_CTFS)
         return outputsToCheck
+
+    def _getOutImodChoice(self) -> int:
+        """Aretomo2 is failing sometimes when the option is 'generate IMOD files for Relion.
+        Thus, in that case, this is not requested to Aretomo, and the generation of the xf files
+        is handled later by Scipion."""
+        requestedOutImod = self.outImod.get()
+        return requestedOutImod if requestedOutImod != GEN_FOR_RELION else DO_NOT_GENERATE
+

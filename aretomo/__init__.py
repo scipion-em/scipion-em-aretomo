@@ -36,7 +36,7 @@ from aretomo.constants import ARETOMO_HOME, ARETOMO_CUDA_LIB, V1_1_3, DEFAULT_VE
 from pyworkflow import VarTypes, TOMO
 
 
-__version__ = '4.0.0'
+__version__ = '4.0.1'
 _logo = "aretomo_logo.png"
 _references = ['Zheng2022']
 
