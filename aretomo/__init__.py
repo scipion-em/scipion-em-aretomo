@@ -28,11 +28,11 @@
 
 import os
 import tempfile
-from os.path import join
+from os.path import join, dirname
 
 import pwem
 import pyworkflow.utils as pwutils
-from aretomo.constants import ARETOMO_HOME, ARETOMO_CUDA_LIB, V1_1_3, DEFAULT_VERSION
+from aretomo.constants import ARETOMO_HOME, ARETOMO_CUDA_LIB, ARETOMO_CUDA_BIN, V1_1_3, DEFAULT_VERSION
 from pyworkflow import VarTypes, TOMO
 
 
@@ -43,7 +43,7 @@ _references = ['Zheng2022']
 
 class Plugin(pwem.Plugin):
     _homeVar = ARETOMO_HOME
-    _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB]
+    _pathVars = [ARETOMO_HOME, ARETOMO_CUDA_LIB, ARETOMO_CUDA_BIN]
     _supportedVersions = [V1_1_3]
     _url = "https://github.com/scipion-em/scipion-em-aretomo"
     _processingField = [TOMO]
@@ -55,7 +55,12 @@ class Plugin(pwem.Plugin):
                                      "binaries are under that folder/bin.",
                          var_type=VarTypes.FOLDER)
         cls._defineVar(ARETOMO_CUDA_LIB, pwem.Config.CUDA_LIB,
-                       description="Path to the CUDA lib path to use with the Aretomo binary.",
+                       description="Path to the CUDA lib folder to use to build and run the "
+                                   "Aretomo binary. If unset, the global CUDA_LIB is used.",
+                       var_type=VarTypes.FOLDER)
+        cls._defineVar(ARETOMO_CUDA_BIN, pwem.Config.CUDA_BIN,
+                       description="Path to the CUDA bin folder to use to build and run the "
+                                   "Aretomo binary. If unset, the global CUDA_BIN is used.",
                        var_type=VarTypes.FOLDER)
 
     @classmethod
@@ -108,17 +113,36 @@ class Plugin(pwem.Plugin):
         the original AreTomo2 Makefile11 with an optimized version that includes
         Fat Binary support, disables PIE, and adds fPIC.
         """
+        # CUDA root used to build the fat binary, resolved from the plugin
+        # specific ARETOMO_CUDA_LIB / ARETOMO_CUDA_BIN variables (defined under
+        # [PLUGINS] in scipion.conf). They follow the global CUDA_LIB / CUDA_BIN
+        # convention and point to <CUDA_ROOT>/lib64 and <CUDA_ROOT>/bin, so the
+        # CUDA *root* needed by the makefile is recovered with dirname(). If
+        # neither was customized they default to the global CUDA_LIB / CUDA_BIN.
+        cudaLib = cls.getVar(ARETOMO_CUDA_LIB)
+        cudaBin = cls.getVar(ARETOMO_CUDA_BIN)
+        if cudaLib and cudaLib != pwem.Config.CUDA_LIB:
+            cudaHome = dirname(cudaLib)
+        elif cudaBin and cudaBin != pwem.Config.CUDA_BIN:
+            cudaHome = dirname(cudaBin)
+        else:
+            cudaHome = dirname(cudaLib or pwem.Config.CUDA_LIB)
+
         # Define the contents of the file.
         # NOTE: Explicit tab characters (\t) are used in the recipe commands to comply with the Make standard.
         contents = (
             "#-------------------------------------------------------------------------------\n"
             "# 1. CUDAHOME is now a conditional variable (?=). If not defined in the \n"
-            "#    environment, it defaults to the standard CUDA symlink in Ubuntu.\n"
+            "#    environment, it defaults to the CUDA root resolved by the plugin at\n"
+            "#    install time from ARETOMO_CUDA_LIB / ARETOMO_CUDA_BIN in scipion.conf\n"
+            "#    (falling back to the global CUDA_LIB). CUDA 12.4 headers are\n"
+            "#    incompatible with glibc 2.41 (cospi/sinpi noexcept conflict); 13.4\n"
+            "#    works with the system default g++ without --allow-unsupported-compiler.\n"
             "# 2. libutil.a, libmrcfile.a are in LibSrc folder where the source code is\n"
             "#    also provided in Util and Mrcfile. To recompile them, run \"make clean\"\n"
             "#    followed by \"make all\" in Util first and then Mrcfile next.\n"
             "#-------------------------------------------------------------------------------\n"
-            "CUDAHOME ?= /usr/local/cuda\n"
+            "CUDAHOME ?= __CUDAHOME__\n"
             "PRJHOME = $(shell pwd)\n"
             "CUDAINC = $(CUDAHOME)/include\n"
             "CUDALIB = $(CUDAHOME)/lib64\n"
@@ -321,6 +345,9 @@ class Plugin(pwem.Plugin):
             "clean:\n"
             "\t@rm -f $(OBJS) $(CUCPPS) *.h~ makefile~ AreTomo2\n"
         )
+
+        # Substitute the CUDA root resolved above into the makefile template.
+        contents = contents.replace('__CUDAHOME__', cudaHome)
 
         # Write the file
         try:
