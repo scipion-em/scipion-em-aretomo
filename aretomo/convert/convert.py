@@ -26,11 +26,19 @@
 
 import os
 import numpy as np
-from typing import Union, List, NamedTuple, Type
+from dataclasses import dataclass, field
+from typing import List, NamedTuple, Optional, Tuple, Type, Union
 
 from pwem.emlib.image import ImageHandler
 
 from tomo.objects import TiltSeries, TiltImage
+
+# Number of columns in the AreTomo2 global alignment table:
+# SEC ROT GMAG TX TY SMEAN SFIT SCALE BASE TILT
+MIN_GLOBAL_COLUMNS = 10
+# IMOD .xf line: a11 a12 a21 a22 dx dy
+XF_LINE_FORMAT = "%9.3f %9.3f %9.3f %9.3f %9.2f %9.2f"
+IDENTITY_XF = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
 
 def getTransformationMatrix(matrix: np.ndarray) -> np.ndarray:
@@ -62,44 +70,201 @@ class AretomoAln(NamedTuple):
     tilt_axes: List[float]
 
 
-def readAlnFile(alignFn: Union[str, os.PathLike]) -> Type[AretomoAln]:
-    """ Read AreTomo output alignment file (.aln):
-    aln2xf conversion taken from https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py
+class AlnParseError(ValueError):
+    """ Raised when an AreTomo2 .aln file cannot be parsed. """
+
+
+@dataclass
+class GlobalAlign:
+    """ One row of the AreTomo2 global alignment table. """
+    sec: int        # section index into the raw tilt series (0-based)
+    rot: float      # tilt-axis rotation angle, degrees
+    tx: float       # X translation, unbinned pixels
+    ty: float       # Y translation, unbinned pixels
+    tilt: float     # nominal tilt angle, degrees
+
+
+@dataclass
+class DarkFrame:
+    """ A tilt image AreTomo2 flagged as dark and excluded from alignment. """
+    darkIdx: int    # index within the tilt-angle-sorted stack
+    sec: int        # section index into the raw tilt series (0-based)
+    tilt: float     # tilt angle, degrees
+
+
+@dataclass
+class AlnData:
+    """ Parsed contents of an AreTomo2 .aln file. """
+    globals: List[GlobalAlign] = field(default_factory=list)
+    darkFrames: List[DarkFrame] = field(default_factory=list)
+    rawSize: Optional[Tuple[int, int, int]] = None  # (nx, ny, nz)
+    numPatches: int = 0
+
+    @property
+    def numRawSections(self) -> int:
+        """ Total number of sections in the raw tilt series, falling back to
+        the aligned + dark row count when the RawSize header is absent. """
+        if self.rawSize is not None:
+            return self.rawSize[2]
+        return len(self.globals) + len(self.darkFrames)
+
+
+def _parseRawSize(tokens) -> Tuple[int, int, int]:
+    """ Parse the three integers of a '# RawSize = nx ny nz' header line. """
+    ints = [int(float(t)) for t in tokens]
+    if len(ints) != 3:
+        raise AlnParseError(f"Expected 3 values for RawSize, got "
+                            f"{len(ints)}: {list(tokens)}")
+    return ints[0], ints[1], ints[2]
+
+
+def _parseDarkFrame(body: str, lineno: int) -> DarkFrame:
+    """ Parse a 'DarkFrame = darkIdx sec tilt' header line. """
+    tokens = body.split("=", 1)[-1].split()
+    if len(tokens) < 3:
+        raise AlnParseError(f"Malformed DarkFrame entry on line "
+                            f"{lineno}: {body!r}")
+    try:
+        return DarkFrame(darkIdx=int(float(tokens[0])),
+                         sec=int(float(tokens[1])),
+                         tilt=float(tokens[2]))
+    except ValueError as exc:
+        raise AlnParseError(f"Non-numeric DarkFrame values on line "
+                            f"{lineno}: {body!r}") from exc
+
+
+def _parseGlobalRow(line: str, lineno: int) -> GlobalAlign:
+    """ Parse one data row of the global alignment table. """
+    tokens = line.split()
+    if len(tokens) < MIN_GLOBAL_COLUMNS:
+        raise AlnParseError(f"Expected at least {MIN_GLOBAL_COLUMNS} columns "
+                            f"on line {lineno}, got {len(tokens)}: {line!r}")
+    try:
+        values = [float(t) for t in tokens]
+    except ValueError as exc:
+        raise AlnParseError(f"Non-numeric value in global row on line "
+                            f"{lineno}: {line!r}") from exc
+    return GlobalAlign(sec=int(values[0]),   # SEC
+                       rot=values[1],        # ROT (tilt axis, deg)
+                       tx=values[3],         # TX
+                       ty=values[4],         # TY
+                       tilt=values[-1])      # TILT (last column)
+
+
+def parseAlnFile(alignFn: Union[str, os.PathLike]) -> AlnData:
+    """ Read and parse an AreTomo2 .aln file into an AlnData record, ignoring
+    the local-alignment section. Raises AlnParseError on malformed content and
+    FileNotFoundError when the file is missing. """
+    aln = AlnData()
+    inLocalSection = False
+
+    try:
+        handle = open(alignFn, "r")
+    except OSError as exc:
+        raise FileNotFoundError(f"Cannot open alignment file: "
+                                f"{alignFn}") from exc
+
+    with handle:
+        for lineno, rawLine in enumerate(handle, start=1):
+            line = rawLine.strip()
+            if not line:
+                continue
+
+            if line.startswith("#"):
+                # Header / comment line. Extract the fields we care about.
+                body = line.lstrip("#").strip()
+                lower = body.lower()
+                if lower.startswith("rawsize"):
+                    aln.rawSize = _parseRawSize(body.split("=", 1)[-1].split())
+                elif lower.startswith("numpatches"):
+                    try:
+                        aln.numPatches = int(body.split("=", 1)[-1])
+                    except ValueError:
+                        aln.numPatches = 0
+                elif lower.startswith("darkframe"):
+                    aln.darkFrames.append(_parseDarkFrame(body, lineno))
+                elif lower.startswith("local alignment"):
+                    # Everything past this marker is per-patch data; stop.
+                    inLocalSection = True
+                continue
+
+            if inLocalSection:
+                continue
+
+            aln.globals.append(_parseGlobalRow(line, lineno))
+
+    if not aln.globals:
+        raise AlnParseError(f"No global alignment rows found in {alignFn!r}; "
+                            "is this a valid AreTomo2 .aln file?")
+    return aln
+
+
+def computeXf(rotDeg: np.ndarray, tx: np.ndarray, ty: np.ndarray) -> np.ndarray:
+    """ Vectorised reproduction of AreTomo2's ImodUtil/CSaveXF.cpp. Returns an
+    (n, 6) array with columns a11 a12 a21 a22 dx dy. The transform is the
+    rotation R(-rot) with shift -R(-rot) . (tx, ty). """
+    rotDeg = np.asarray(rotDeg, dtype=np.float64)
+    tx = np.asarray(tx, dtype=np.float64)
+    ty = np.asarray(ty, dtype=np.float64)
+    if not (rotDeg.shape == tx.shape == ty.shape):
+        raise ValueError("rotDeg, tx and ty must share the same shape")
+
+    negTheta = -np.radians(rotDeg)
+    cosT, sinT = np.cos(negTheta), np.sin(negTheta)
+    a11, a12, a21, a22 = cosT, -sinT, sinT, cosT
+    dx = -(a11 * tx + a12 * ty)
+    dy = -(a21 * tx + a22 * ty)
+
+    return np.column_stack([a11, a12, a21, a22, dx, dy])
+
+
+def alnToXf(aln: AlnData, fillDark: bool = True,
+            order: str = "sec") -> np.ndarray:
+    """ Convert parsed AlnData into an (n, 6) array of IMOD .xf rows.
+
+    :param fillDark: when True (default) emit one row per raw section in
+        section order, inserting identity transforms for dark frames (matches
+        AreTomo2's -OutImod 1 output). When False only aligned rows are written.
+    :param order: 'sec' to sort aligned rows by section index, 'file' to keep
+        the order found in the file (ignored when fillDark is True).
     """
-    # Read number of sections, as we need to ignore local alignments part of the file
-    comments = []
-    with open(alignFn) as f:
-        for line in f:
-            if line.startswith("# SEC"):
-                break
-            else:
-                comments.append(line)
+    if order not in ("sec", "file"):
+        raise ValueError(f"order must be 'sec' or 'file', got {order!r}")
 
-    numSec, darkNum = 0, 0
-    for c in comments:
-        if c.startswith("# RawSize"):
-            numSec = int(c.split()[-1])
-        elif c.startswith("# DarkFrame"):
-            darkNum += 1
+    rot = np.array([g.rot for g in aln.globals], dtype=np.float64)
+    tx = np.array([g.tx for g in aln.globals], dtype=np.float64)
+    ty = np.array([g.ty for g in aln.globals], dtype=np.float64)
+    xf = computeXf(rot, tx, ty)
 
-    data = np.loadtxt(alignFn, dtype=float, comments='#',
-                      skiprows=len(comments) + 1,
-                      max_rows=numSec - darkNum)
-    AretomoAln.sections = list(data[:, 0].astype(int))  # SEC
-    AretomoAln.tilt_angles = data[:, -1]  # TILT
-    AretomoAln.tilt_axes = data[:, 1]  # ROT
-    angles = -np.radians(data[:, 1])  # ROT
-    shifts = data[:, [3, 4]]  # TX, TY
+    if not fillDark:
+        if order == "sec":
+            sortIdx = np.argsort([g.sec for g in aln.globals], kind="stable")
+            xf = xf[sortIdx]
+        return xf
 
-    c, s = np.cos(angles), np.sin(angles)
-    rot = np.empty((len(angles), 2, 2))
-    rot[:, 0, 0] = c
-    rot[:, 0, 1] = -s
-    rot[:, 1, 0] = s
-    rot[:, 1, 1] = c
+    # Raw-ordered output: place each aligned row at its section index and fill
+    # the gaps (dark frames or otherwise missing sections) with the identity.
+    nRaw = aln.numRawSections
+    out = np.tile(np.asarray(IDENTITY_XF, dtype=np.float64), (nRaw, 1))
+    for row, g in zip(xf, aln.globals):
+        if not 0 <= g.sec < nRaw:
+            raise ValueError(f"Section index {g.sec} out of range for "
+                             f"RawSize nz={nRaw}")
+        out[g.sec] = row
+    return out
 
-    shifts_rot = np.einsum('ijk,ik->ij', rot, shifts)
-    AretomoAln.imod_matrix = np.concatenate([rot.reshape(-1, 4), -shifts_rot], axis=1)
+
+def readAlnFile(alignFn: Union[str, os.PathLike]) -> Type[AretomoAln]:
+    """ Read AreTomo output alignment file (.aln) and populate AretomoAln with
+    the aligned (non-dark) rows, in file order, plus their IMOD transforms.
+    aln2xf conversion follows AreTomo2's ImodUtil/CSaveXF.cpp (originally after
+    https://github.com/brisvag/stemia/blob/main/stemia/aretomo/aln2xf.py).
+    """
+    aln = parseAlnFile(alignFn)
+    AretomoAln.sections = [g.sec for g in aln.globals]  # SEC
+    AretomoAln.tilt_angles = np.array([g.tilt for g in aln.globals])  # TILT
+    AretomoAln.tilt_axes = np.array([g.rot for g in aln.globals])  # ROT
+    AretomoAln.imod_matrix = alnToXf(aln, fillDark=False, order="file")
 
     return AretomoAln
 
@@ -132,5 +297,30 @@ def writeAlnFile(ts: TiltSeries, tsFn: str, alignFn: Union[str, os.PathLike]):
                           f"{1:>9.2f}"
                           f"{0:>9.2f}"
                           f"{ti.getTiltAngle():>10.2f}\n")
+
+
+def writeXfFile(matrix: np.ndarray, xfFn: Union[str, os.PathLike]):
+    """ Write an (n, 6) transform array to an IMOD .xf text file. """
+    matrix = np.asarray(matrix, dtype=np.float64)
+    if matrix.ndim != 2 or matrix.shape[1] != 6:
+        raise ValueError(f"Expected a (n, 6) transform matrix, "
+                         f"got shape {matrix.shape}")
+    with open(xfFn, "w") as xfFile:
+        for row in matrix:
+            xfFile.write(XF_LINE_FORMAT % tuple(row))
+            xfFile.write("\n")
+
+
+def convertAlnToXf(alignFn: Union[str, os.PathLike],
+                   xfFn: Union[str, os.PathLike],
+                   fillDark: bool = True,
+                   order: str = "sec") -> np.ndarray:
+    """ Parse an AreTomo2 .aln file and write the corresponding IMOD .xf file.
+    Returns the (n, 6) transform array that was written. See alnToXf for the
+    meaning of fillDark and order. """
+    aln = parseAlnFile(alignFn)
+    xf = alnToXf(aln, fillDark=fillDark, order=order)
+    writeXfFile(xf, xfFn)
+    return xf
 
 

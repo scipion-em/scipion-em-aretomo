@@ -1,9 +1,19 @@
+4.0.1: aln to xf transformation is carried out by Scipion instead of natively by Aretomo2, as it fails in some cases.
+4.0.0: installation updated. Now a fat binary is compiled. Compatible with most of the gpu architectures.
+3.11.2:
+ Users:
+  - Correct fix in odd / even when only tomographic reconstruction is requested (Thanks Rory!).
+  - Set the default no. threads to 3.
+ Developers: remove the dependency on ProtTomoBase.
+3.11.1: deploy test.
 3.11.0:
  Users: interpolated tilt-series removed. The viewers manage from scipion-em-tomo 3.10.1 the interpolation.
  Developers:
   - Adapted to the updated TiltSeries model from scipion-em-tomo 3.10.1.
   - Streaming reviewed and made more robust.
   - Interpolated tilt-series checking removed from the tests.
+  - Fix streaming condition to insert the closing step. Now it uses collections.Counter when comparing
+    the tsId lists instead of direct comparison, which is order-sensitive.
 3.10.3:
  Users:
   - Fix the even/odd functionality.

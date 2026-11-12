@@ -24,12 +24,12 @@
 # *
 # **************************************************************************
 
-ARETOMO_BIN = 'ARETOMO_BIN'
 ARETOMO_HOME = 'ARETOMO_HOME'
 ARETOMO_CUDA_LIB = 'ARETOMO_CUDA_LIB'
 
 # Supported versions
 V1_1_3 = '1.1.3'
+DEFAULT_VERSION = V1_1_3
 
 RECON_SART = 0
 RECON_WBP = 1
