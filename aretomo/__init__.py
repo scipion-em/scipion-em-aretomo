@@ -32,9 +32,8 @@ from os.path import join
 
 import pwem
 import pyworkflow.utils as pwutils
-from aretomo.constants import ARETOMO_HOME, ARETOMO_CUDA_LIB, V1_1_3, DEFAULT_VERSION, ARETOMO_BIN
 from pyworkflow import VarTypes, TOMO
-
+from aretomo.constants import ARETOMO_HOME, ARETOMO_CUDA_LIB, V1_1_3, DEFAULT_VERSION, ARETOMO3
 
 __version__ = '4.0.1'
 _logo = "aretomo_logo.png"
@@ -71,7 +70,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def getProgram(cls) -> str:
         """ Return the program binary that will be used. """
-        return cls.getHome(cls.getVar(ARETOMO_BIN))
+        return cls.getHome(cls.getVar(ARETOMO3))
         # return cls.getHome('bin', cls.getVar(ARETOMO_BIN))
 
     @classmethod
@@ -86,7 +85,8 @@ class Plugin(pwem.Plugin):
             f'cd {aretomoHome} && '
             'git checkout main && '
             f'rm {MAKEFILE11} && '  # remove the original makefile
-            f'mv {fixedMakeFile} {join(aretomoHome, MAKEFILE11)} && '  # move the fixed makefile to the installation folder
+            f'mv {fixedMakeFile} {join(aretomoHome, MAKEFILE11)} && '  # move the fixed makefile to the 
+            # installation folder
             f'make exe -f {MAKEFILE11} && '
             f'touch {ARETOMO_INSTALLED}'
         ]
@@ -96,11 +96,11 @@ class Plugin(pwem.Plugin):
         ]
 
         env.addPackage('aretomo2', version=DEFAULT_VERSION,
-                        tar = 'void.tgz',
-                        neededProgs = ['git', 'gcc', 'g++', 'make', 'cmake'],
-                        commands = installationCmds,
-                        updateCuda = True,
-                        default = True)
+                       tar='void.tgz',
+                       neededProgs=['git', 'gcc', 'g++', 'make', 'cmake'],
+                       commands=installationCmds,
+                       updateCuda=True,
+                       default=True)
 
     @classmethod
     def __createFatBinaryMakeFile(cls) -> str:

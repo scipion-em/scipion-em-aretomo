@@ -26,6 +26,8 @@
 
 ARETOMO_HOME = 'ARETOMO_HOME'
 ARETOMO_CUDA_LIB = 'ARETOMO_CUDA_LIB'
+ARETOMO2 = 'AreTomo2'
+ARETOMO3 = 'AreTomo3'
 
 # Supported versions
 V1_1_3 = '1.1.3'
