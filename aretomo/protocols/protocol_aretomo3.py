@@ -41,6 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import Transform, CTFModel
 from pwem.emlib.image import ImageHandler
+from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.utils import cyanStr, getExt, createLink, redStr
 from tomo.protocols import ProtTomoBase
 from tomo.objects import (Tomogram, TiltSeries, TiltImage,
@@ -72,8 +73,8 @@ RECON_RANGE = 'reconRange'
 
 # Tilt-axis refinement options
 NO_REFINE = 0
-REFINE_3_DEG = 1
-REFINE_10_DEG = 2
+REFINE_10_DEG = 1
+REFINE_3_DEG = 2
 
 
 class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
@@ -392,8 +393,14 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             if not doAlignTs:
                 if self._getAttribVal(DO_TOMO_REC):
                     createLink(tsFn, outputTsFileName)
-                    alnFile = self.getAlnFile(tsFn, tsId)
-                    writeAlnFile(ts, tsFn, alnFile)
+                    # The alignment file is read by AreTomo3 (-Cmd 2) from the directory of the input
+                    # tilt-series, while the outputs are registered from the one located in the extra dir
+                    for alnFile in [self.getAlnFile(tsFn, tsId),
+                                    self.getFilePath(tsFn, tmpPrefix, tsId, ext=".aln")]:
+                        writeAlnFile(ts, tsFn, alnFile)
+                    # The tilt angle file is mandatory to load the tilt-series, and it must contain one
+                    # line per image present in the stack
+                    self._genAretomo3TltFile(ts, self.getFilePath(tsFn, tmpPrefix, tsId, ext=".rawtlt"))
             else:
                 if self.doEvenOdd.get():
                     outputTsFnEven = self.getFilePathEven(tsFn, tmpPrefix, tsId, ext=MRC_EXT)
@@ -495,6 +502,9 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                         self._store(self.badTomoRecMsg)
                         return
                     outputSetOfTomograms = self.getOutputSetOfTomograms()
+                    # AreTomo3 writes in the header the pixel size read from the header of the input stack
+                    # (ignoring -PixSize) multiplied by the binning factor, so it may not match Scipion's
+                    setMRCSamplingRate(tomoFileName, outputSetOfTomograms.getSamplingRate())
                     # Tomogram attributes
                     newTomogram = Tomogram()
                     newTomogram.setLocation(tomoFileName)
@@ -680,9 +690,9 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
             if doTomoRec:
                 if not inTsSet.hasAlignment():
                     errors.append('The tilt-series introduced do not have alignment information.')
-            if tomoThk <= 0:
-                errors.append('The sample thickness cannot be estimated without aligning the tilt-series.')
-            if doTomoRec:
+                if tomoThk <= 0:
+                    errors.append('The sample thickness cannot be estimated without aligning the tilt-series.')
+            else:
                 errors.append("You cannot switch off both alignment and reconstruction.")
 
         if self.doEvenOdd.get() and not inTsSet.hasOddEven():
@@ -716,12 +726,14 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
         tomoThk = self._getAttribVal(TOMO_THK)
 
         args = {
+            # -Cmd 1: starts from the tilt-series (CTF estimation, alignment and reconstruction)
+            # -Cmd 2: tomogram reconstruction only, using the .aln file located beside the tilt-series
+            '-Cmd': 1 if align else 2,
             '-InPrefix': tsFn,
             '-OutDir': extraPrefix,
             '-PixSize': ts.getSamplingRate(),  # Pixel size in A of input stack in angstrom.
             '-Kv': acq.getVoltage(),  # High tension in kV needed for dose weighting
             '-SplitSum': 1 if self.doEvenOdd.get() else 0,  # Odd / even management
-            '-Align': align,
             '-VolZ': tomoThk if recTomo else 0,  # z height for rec. It must be > 0 to rec a volume
             '-FlipVol': 1 if recTomo and self.flipVol else 0,  # Flip volume from xzy to xyz
             '-FlipInt': 1 if self.flipInt else 0,  # Flip the intensity
@@ -751,14 +763,18 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
                 args['-Sart'] = f"{self.SARTiter} {self.SARTproj}"
             else:
                 args['-Wbp'] = 1
-            
 
         # CTF estimation
         if estimateCtf:
             args['-Cs'] = acq.getSphericalAberration()
+            args['-AmpContrast'] = acq.getAmplitudeContrast()
             args['-CorrCTF'] = 1 if self.doCorrCtf.get() else 0
             if self.doPhaseShiftSearch.get():
                 args['-ExtPhase'] = f'{self.minPhaseShift} {self.maxPhaseShift}'
+        else:
+            # AreTomo3 estimates the CTF unless the spherical aberration (default 2.7) or the voltage are 0
+            args['-Cs'] = 0
+            args['-CorrCTF'] = 0
 
         # Tilt-axis management
         tiltAxisAngle = acq.getTiltAxisAngle() or 0.0
@@ -1044,4 +1060,5 @@ class ProtAreTomo3(EMProtocol, ProtTomoBase, ProtStreamingBase):
     def _getAttribVal(self, attribName: str, defaultVal: Union[int, float, bool, None] = None) \
             -> Union[int, float, bool, None]:
         attribVal = getattr(self, attribName, None)
-        return attribVal if attribVal else defaultVal
+        attribVal = attribVal.get() if attribVal is not None else None
+        return defaultVal if attribVal is None else attribVal

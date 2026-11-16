@@ -36,8 +36,8 @@ from tomo.protocols import ProtImportTs
 from tomo.tests import RE4_STA_TUTO, DataSetRe4STATuto
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
 from . import DataSetEmpiar10453, EMDB_10453, TS_079, TS_145
-from ..protocols.protocol_aretomo import (ProtAreTomoAlignRecon, OUT_TS, OUT_TOMO,
-                                          OUT_CTFS)
+from ..protocols.protocol_aretomo3 import (ProtAreTomo3, OUT_TS, OUT_TOMO,
+                                           OUT_CTFS)
 
 
 class TestAreTomo2Base(TestBaseCentralizedLayer):
@@ -127,7 +127,6 @@ class TestAreTomo2(TestAreTomo2Base):
                            eV: bool = False) -> None:
         msg = ("\n==> Testing AreTomo:"
                "\n\t- Align only"
-               "\n\t- Dose weighting"
                "\n\t- No views are excluded by Aretomo"
                "\n\t- CTF not generated")
         eVLabel = ''
@@ -142,15 +141,14 @@ class TestAreTomo2(TestAreTomo2Base):
             testDims = self.expectedDimsTs
 
         # Run the protocol
-        prot = self.newProtocol(ProtAreTomoAlignRecon,
+        prot = self.newProtocol(ProtAreTomo3,
                                 inputSetOfTiltSeries=inTsSet,
+                                doAliTs=True,
                                 makeTomo=False,
-                                doDW=True,
                                 doEstimateCtf=False,
                                 alignZ=self.alignZ,
-                                binFactor=self.binFactor,
                                 darkTol=0)
-        prot.setObjLabel(f'Align only, no CTF, DW{eVLabel}')
+        prot.setObjLabel(f'Align only, no CTF{eVLabel}')
         self.launchProtocol(prot)
 
         # CHECK THE OUTPUTS
@@ -237,11 +235,11 @@ class TestAreTomo2(TestAreTomo2Base):
         print(magentaStr(msg))
 
         # Run the protocol
-        prot = self.newProtocol(ProtAreTomoAlignRecon,
+        prot = self.newProtocol(ProtAreTomo3,
                                 inputSetOfTiltSeries=inTsSet,
+                                doAliTs=True,
                                 makeTomo=False,
                                 alignZ=self.alignZ,
-                                binFactor=self.binFactor,
                                 darkTol=0.8)
         prot.setObjLabel(f'Align only, exclude views{eVLabel}')
         self.launchProtocol(prot)
@@ -304,8 +302,9 @@ class TestAreTomo2(TestAreTomo2Base):
             eVLabel = ', eV'
         print(magentaStr(msg))
 
-        prot = self.newProtocol(ProtAreTomoAlignRecon,
+        prot = self.newProtocol(ProtAreTomo3,
                                 inputSetOfTiltSeries=inTsSet,
+                                doAliTs=True,
                                 tomoThickness=self.unbinnedThk,
                                 alignZ=self.alignZ,
                                 binFactor=self.binFactor,
@@ -419,11 +418,12 @@ class TestAretomo2OnlyRec(TestBaseCentralizedLayer):
         print(magentaStr(msg))
 
         # Run the protocol
-        prot = self.newProtocol(ProtAreTomoAlignRecon,
+        prot = self.newProtocol(ProtAreTomo3,
                                 inputSetOfTiltSeries=inTsSet,
-                                skipAlign=True,
+                                doAliTs=False,
                                 makeTomo=True,
-                                tomoThickness=1200,
+                                doEstimateCtf=False,
+                                tomoThickness=self.unbinnedThk,
                                 binFactor=self.binFactor)
         prot.setObjLabel(f'Reconstruct only {eVLabel}')
         self.launchProtocol(prot)

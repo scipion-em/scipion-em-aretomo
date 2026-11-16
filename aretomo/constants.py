@@ -26,12 +26,11 @@
 
 ARETOMO_HOME = 'ARETOMO_HOME'
 ARETOMO_CUDA_LIB = 'ARETOMO_CUDA_LIB'
-ARETOMO2 = 'AreTomo2'
 ARETOMO3 = 'AreTomo3'
 
-# Supported versions
-V1_1_3 = '1.1.3'
-DEFAULT_VERSION = V1_1_3
+# Supported versions: based on commits, no tagged trace is carried out in the native repository
+COMMIT_2026_09_21 = '6b4d6b3'
+DEFAULT_VERSION = COMMIT_2026_09_21
 
 RECON_SART = 0
 RECON_WBP = 1
